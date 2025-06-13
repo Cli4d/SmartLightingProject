@@ -1,401 +1,359 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:padding="16dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:orientation="vertical">
 
-        <!-- Brightness Section -->
+        <!-- Brightness Setting -->
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Preferred Brightness"
             android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-            android:textColor="@color/md_theme_onSurface" />
+            android:layout_marginBottom="8dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:orientation="horizontal"
-            android:gravity="center_vertical">
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
 
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_brightness_low"
-                app:tint="@color/md_theme_onSurfaceVariant" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="10%"
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:layout_marginEnd="8dp" />
 
-            <SeekBar
-                android:id="@+id/seekBarPreferenceBrightness"
+            <com.google.android.material.slider.Slider
+                android:id="@+id/sliderBrightness"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginHorizontal="16dp"
-                android:max="100"
-                android:progress="80" />
+                android:valueFrom="10"
+                android:valueTo="100"
+                android:stepSize="10"
+                android:value="80" />
 
             <TextView
-                android:id="@+id/textPreferenceBrightnessValue"
+                android:id="@+id/textBrightnessValue"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="80%"
-                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
-                android:textColor="@color/md_theme_onSurface"
-                android:minWidth="40dp"
-                android:gravity="end" />
+                android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                android:layout_marginStart="8dp"
+                android:minWidth="32dp" />
 
         </LinearLayout>
 
-        <!-- Color Section -->
+        <!-- Color Setting -->
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
             android:text="Preferred Color"
             android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-            android:textColor="@color/md_theme_onSurface" />
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="12dp" />
 
-        <HorizontalScrollView
+        <!-- Selected Color Preview -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:scrollbars="none">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <View
+                android:id="@+id/selectedColorPreview"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/color_preview_background"
+                android:layout_marginEnd="12dp" />
 
             <LinearLayout
-                android:id="@+id/colorPreferenceContainer"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="4dp">
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-                <!-- Warm White -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
+                <TextView
+                    android:id="@+id/textSelectedColor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Warm White"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge" />
 
-                    <View
-                        android:id="@+id/colorWarmWhite"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#FFBB66"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#FFBB66" />
-
-                    <ImageView
-                        android:id="@+id/checkWarmWhite"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
-
-                <!-- Soft Yellow -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorSoftYellow"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#FFDD99"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#FFDD99" />
-
-                    <ImageView
-                        android:id="@+id/checkSoftYellow"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
-
-                <!-- Pure White -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorPureWhite"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#FFFFFF"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#FFFFFF" />
-
-                    <ImageView
-                        android:id="@+id/checkPureWhite"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_primary" />
-                </FrameLayout>
-
-                <!-- Cool White -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorCoolWhite"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#BBEEFF"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#BBEEFF" />
-
-                    <ImageView
-                        android:id="@+id/checkCoolWhite"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
-
-                <!-- Soft Blue -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorSoftBlue"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#99CCFF"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#99CCFF" />
-
-                    <ImageView
-                        android:id="@+id/checkSoftBlue"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
-
-                <!-- Lavender -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorLavender"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#CC99FF"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#CC99FF" />
-
-                    <ImageView
-                        android:id="@+id/checkLavender"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
-
-                <!-- Soft Red -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorSoftRed"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#FFAAAA"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#FFAAAA" />
-
-                    <ImageView
-                        android:id="@+id/checkSoftRed"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
-
-                <!-- Soft Green -->
-                <FrameLayout
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:layout_margin="4dp">
-
-                    <View
-                        android:id="@+id/colorSoftGreen"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_gravity="center"
-                        android:background="@drawable/circle_color_selector"
-                        android:backgroundTint="#AAFFAA"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:tag="#AAFFAA" />
-
-                    <ImageView
-                        android:id="@+id/checkSoftGreen"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:layout_gravity="center"
-                        android:src="@drawable/ic_check"
-                        android:visibility="gone"
-                        app:tint="@color/md_theme_onPrimary" />
-                </FrameLayout>
+                <TextView
+                    android:id="@+id/textSelectedColorHex"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="#FFDD99"
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                    android:textColor="@color/md_theme_onSurfaceVariant" />
 
             </LinearLayout>
-        </HorizontalScrollView>
 
-        <!-- Schedule Section -->
+        </LinearLayout>
+
+        <!-- Circular Color Picker -->
         <TextView
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Schedule Settings"
+            android:text="Touch and drag to select color:"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:layout_marginBottom="12dp" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="280dp"
+            android:layout_marginBottom="16dp">
+
+            <com.smart.smartbulb.CircularColorPicker
+                android:id="@+id/circularColorPicker"
+                android:layout_width="250dp"
+                android:layout_height="250dp"
+                android:layout_gravity="center" />
+
+        </FrameLayout>
+
+        <!-- Quick Color Presets -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Quick Presets:"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Whites Row -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Whites"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <View
+                android:id="@+id/colorWarmWhite"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#FFBB66"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <View
+                android:id="@+id/colorSoftYellow"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#FFDD99"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <View
+                android:id="@+id/colorPureWhite"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#FFFFFF"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <View
+                android:id="@+id/colorCoolWhite"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#BBEEFF"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+        <!-- Colors Row -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Colors"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <View
+                android:id="@+id/colorSoftBlue"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#99CCFF"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <View
+                android:id="@+id/colorLavender"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#CC99FF"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <View
+                android:id="@+id/colorSoftRed"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#FFAAAA"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <View
+                android:id="@+id/colorSoftGreen"
+                android:layout_width="0dp"
+                android:layout_height="48dp"
+                android:layout_weight="1"
+                android:background="@drawable/color_picker_item"
+                android:backgroundTint="#AAFFAA"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
+
+        <!-- Custom Color Input (Optional) -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Custom Color (Advanced)"
+            android:textAppearance="@style/TextAppearance.Material3.LabelMedium"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Hex Color (e.g., #FF5733)"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editCustomColor"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1"
+                android:maxLength="7" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Sunset Time Setting -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Sunset Time"
             android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-            android:textColor="@color/md_theme_onSurface" />
+            android:layout_marginBottom="8dp" />
 
-        <!-- Auto Schedule Switch -->
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/switchPreferenceAutoSchedule"
+        <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Enable Auto Schedule"
-            android:checked="true" />
+            android:hint="HH:MM"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_marginBottom="24dp">
 
-        <!-- Sunset Time -->
-        <LinearLayout
-            android:id="@+id/layoutSunsetTime"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:padding="8dp">
-
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_sunset"
-                app:tint="@color/md_theme_tertiary" />
-
-            <TextView
-                android:layout_width="0dp"
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editSunsetTime"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="16dp"
-                android:text="Sunset Time"
-                android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
-                android:textColor="@color/md_theme_onSurface" />
+                android:inputType="time"
+                android:maxLines="1"
+                android:text="18:30" />
 
-            <TextView
-                android:id="@+id/textPreferenceSunsetTime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="18:30"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                android:textColor="@color/md_theme_primary" />
+        </com.google.android.material.textfield.TextInputLayout>
 
-        </LinearLayout>
-
-        <!-- Bedtime -->
-        <LinearLayout
-            android:id="@+id/layoutBedtime"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?attr/selectableItemBackground"
-            android:padding="8dp">
-
-            <ImageView
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:src="@drawable/ic_moon"
-                app:tint="@color/md_theme_secondary" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="16dp"
-                android:text="Bedtime"
-                android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
-                android:textColor="@color/md_theme_onSurface" />
-
-            <TextView
-                android:id="@+id/textPreferenceBedtime"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="22:00"
-                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                android:textColor="@color/md_theme_primary" />
-
-        </LinearLayout>
-
-        <!-- Info Text -->
+        <!-- Bedtime Setting -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="These preferences will be applied automatically when you are identified"
+            android:text="Bedtime"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:layout_marginBottom="8dp" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="HH:MM"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/editBedtime"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="time"
+                android:maxLines="1"
+                android:text="22:00" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Auto Schedule Setting -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Auto Schedule"
+                android:textAppearance="@style/TextAppearance.Material3.TitleMedium" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/switchAutoSchedule"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="true" />
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Automatically adjust lighting based on sunset and bedtime settings"
             android:textAppearance="@style/TextAppearance.Material3.BodySmall"
-            android:textColor="@color/md_theme_onSurfaceVariant"
-            android:alpha="0.8" />
+            android:textColor="@color/md_theme_onSurfaceVariant" />
 
     </LinearLayout>
-</ScrollView>
+
+</androidx.core.widget.NestedScrollView>

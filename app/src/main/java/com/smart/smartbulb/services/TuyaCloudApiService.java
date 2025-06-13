@@ -145,25 +145,40 @@ public class TuyaCloudApiService {
         Log.d(TAG, "Setting color: " + hexColor);
 
         try {
-            // Convert hex to HSV for Tuya
-            int color = Color.parseColor(hexColor);
+            // Remove # if present
+            if (hexColor.startsWith("#")) {
+                hexColor = hexColor.substring(1);
+            }
+
+            // Parse RGB from hex
+            int r = Integer.valueOf(hexColor.substring(0, 2), 16);
+            int g = Integer.valueOf(hexColor.substring(2, 4), 16);
+            int b = Integer.valueOf(hexColor.substring(4, 6), 16);
+
+            // Convert RGB to HSV
             float[] hsv = new float[3];
-            Color.colorToHSV(color, hsv);
+            Color.RGBToHSV(r, g, b, hsv);
 
-            // Tuya HSV format: HHHHSSSSDDDD (12 characters)
-            int h = (int) (hsv[0] * 65535 / 360); // 0-65535
-            int s = (int) (hsv[1] * 1000);        // 0-1000
-            int v = (int) (hsv[2] * 1000);        // 0-1000
+            // Convert to Tuya's scale - based on your device status format
+            int h = (int) hsv[0];                    // Hue: 0-360 (same as your device shows)
+            int s = (int) (hsv[1] * 1000);           // Saturation: 0-1000 (same as your device shows)
+            int v = (int) (hsv[2] * 1000);           // Value: 0-1000 (same as your device shows)
 
-            String hsvString = String.format("%04x%04x%04x", h, s, v);
+            // Create JSON string in the exact format your device expects
+            String hsvJson = String.format("{\"h\":%d,\"s\":%d,\"v\":%d}", h, s, v);
+
+            Log.d(TAG, "Converted " + hexColor + " to HSV JSON: " + hsvJson);
 
             JSONObject command = new JSONObject();
             command.put("code", "colour_data_v2");
-            command.put("value", hsvString);
+            command.put("value", hsvJson);
             sendCommand(command);
 
         } catch (Exception e) {
             Log.e(TAG, "Error creating color command: " + e.getMessage());
+            if (callback != null) {
+                callback.onError("Failed to set color: " + e.getMessage());
+            }
         }
     }
 
@@ -573,7 +588,21 @@ public class TuyaCloudApiService {
      */
     private String convertHSVToHex(String hsvColor) {
         try {
-            if (hsvColor.length() == 12) {
+            // Check if it's the new JSON format
+            if (hsvColor.startsWith("{") && hsvColor.contains("\"h\":")) {
+                JSONObject hsvJson = new JSONObject(hsvColor);
+                int h = hsvJson.getInt("h");
+                int s = hsvJson.getInt("s");
+                int v = hsvJson.getInt("v");
+
+                // Convert from Tuya scale to Android scale
+                float[] hsv = {h, s / 1000f, v / 1000f};
+                int color = Color.HSVToColor(hsv);
+
+                return String.format("#%06X", (0xFFFFFF & color));
+            }
+            // Handle old hex format (12 characters)
+            else if (hsvColor.length() == 12) {
                 int h = Integer.parseInt(hsvColor.substring(0, 4), 16);
                 int s = Integer.parseInt(hsvColor.substring(4, 8), 16);
                 int v = Integer.parseInt(hsvColor.substring(8, 12), 16);

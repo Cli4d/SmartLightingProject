@@ -2,8 +2,12 @@ package com.smart.smartbulb.fragments;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,7 +15,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast; // Added for simple toasts
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -27,15 +31,17 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 import com.smart.smartbulb.R;
 import com.smart.smartbulb.models.LightSettings;
-import com.smart.smartbulb.services.AzureSpeakerIdentificationService;
-import com.smart.smartbulb.services.AzureSpeakerIdentificationService.SpeakerProfile;
+import com.smart.smartbulb.services.EagleSpeakerIdentificationService;
+import com.smart.smartbulb.services.EagleSpeakerIdentificationService.SpeakerProfile;
 import com.smart.smartbulb.services.TuyaCloudApiService;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * Voice Control Fragment with Azure Speaker Identification
+ * Voice Control Fragment with PicoVoice Eagle Speaker Identification
  * Identifies speakers and applies their personalized lighting preferences
  */
 public class VoiceControlFragment extends Fragment {
@@ -56,18 +62,18 @@ public class VoiceControlFragment extends Fragment {
     private TextView textEnrolledTitle;
     private RecyclerView recyclerSpeakers;
     private com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton fabVoiceCommand;
-    private View recordingStatusContainer; // Added for the entire recording UI group
+    private View recordingStatusContainer;
 
     // Services
-    private AzureSpeakerIdentificationService speakerService;
+    private EagleSpeakerIdentificationService speakerService;
     private TuyaCloudApiService tuyaService;
 
     // State
-    private LightSettings currentLightSettings; // Holds the current state of the bulb
-    private SpeakerProfile currentSpeaker; // The last identified speaker
-    private Consumer<LightSettings> lightSettingsCallback; // Callback to activity/main fragment
-    private volatile boolean isRecording = false; // Tracks if audio recording is active
-    private volatile boolean isProcessingApiCall = false; // Tracks if an API call is in progress
+    private LightSettings currentLightSettings;
+    private SpeakerProfile currentSpeaker;
+    private Consumer<LightSettings> lightSettingsCallback;
+    private volatile boolean isRecording = false;
+    private volatile boolean isProcessingApiCall = false;
 
     // Speaker adapter for RecyclerView
     private SpeakerAdapter speakerAdapter;
@@ -82,7 +88,7 @@ public class VoiceControlFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        Log.d(TAG, "VoiceControlFragment onViewCreated");
+        Log.d(TAG, "VoiceControlFragment onViewCreated with Eagle integration");
 
         // Initialize components
         initializeViews();
@@ -106,12 +112,35 @@ public class VoiceControlFragment extends Fragment {
         textEnrolledTitle = rootView.findViewById(R.id.textEnrolledTitle);
         recyclerSpeakers = rootView.findViewById(R.id.recyclerSpeakers);
         fabVoiceCommand = rootView.findViewById(R.id.fabVoiceCommand);
-        recordingStatusContainer = rootView.findViewById(R.id.recordingStatusContainer); // Ensure this ID exists in your layout
+        recordingStatusContainer = rootView.findViewById(R.id.recordingStatusContainer);
     }
 
     private void initializeServices() {
-        // Initialize speaker service
-        speakerService = new AzureSpeakerIdentificationService(requireContext());
+        // Initialize Eagle speaker service
+        speakerService = new EagleSpeakerIdentificationService(requireContext());
+
+        // Set initialization callback to properly update UI state
+        speakerService.setInitializationCallback(new EagleSpeakerIdentificationService.InitializationCallback() {
+            @Override
+            public void onInitializationComplete(boolean success) {
+                Log.d(TAG, "Eagle initialization complete. Success: " + success);
+
+                safeUpdateUI(() -> {
+                    if (success) {
+                        Log.d(TAG, "Eagle initialization successful");
+                        Log.d(TAG, speakerService.getStorageInfo());
+                    } else {
+                        String status = speakerService.getInitializationStatus();
+                        Log.e(TAG, "Eagle initialization failed: " + status);
+                        safeShowSnackbar("Voice control issue: " + status);
+                    }
+
+                    // Always update UI state and refresh speaker list
+                    updateControlStates();
+                    refreshSpeakerList();
+                });
+            }
+        });
 
         // Initialize Tuya service
         tuyaService = new TuyaCloudApiService();
@@ -137,8 +166,6 @@ public class VoiceControlFragment extends Fragment {
             public void onBrightnessChanged(int brightness) {
                 if (currentLightSettings != null) {
                     currentLightSettings.setBrightness(brightness);
-                    // Only update current speaker UI if this change is due to speaker preferences
-                    // Otherwise, the main fragment will handle it.
                 }
             }
 
@@ -167,7 +194,7 @@ public class VoiceControlFragment extends Fragment {
             }
         });
 
-        // Connect to Tuya on startup or resume
+        // Connect to Tuya on startup
         tuyaService.connect();
 
         // Get current light settings from arguments
@@ -187,7 +214,13 @@ public class VoiceControlFragment extends Fragment {
         // Enroll new speaker button
         buttonEnrollNew.setOnClickListener(v -> showEnrollmentDialog());
 
-        // Voice command FAB
+        // Add long-press to clear all profiles (for debugging/reset)
+        buttonEnrollNew.setOnLongClickListener(v -> {
+            showClearProfilesDialog();
+            return true;
+        });
+
+        // Voice command FAB (placeholder)
         fabVoiceCommand.setOnClickListener(v -> processVoiceCommand());
 
         // Setup speaker list
@@ -219,7 +252,7 @@ public class VoiceControlFragment extends Fragment {
 
             @Override
             public void onEnrollMore(SpeakerProfile profile) {
-                // Allows user to continue enrolling if a profile isn't fully enrolled
+                // Continue enrollment for incomplete profiles
                 enrollSpeaker(profile.getProfileId(), profile.getUserName(), profile.getRemainingEnrollmentsSpeechLength());
             }
         });
@@ -236,7 +269,6 @@ public class VoiceControlFragment extends Fragment {
                     new String[]{Manifest.permission.RECORD_AUDIO},
                     PERMISSION_REQUEST_AUDIO);
         } else {
-            // Permission already granted, enable buttons
             updateControlStates();
         }
     }
@@ -244,14 +276,13 @@ public class VoiceControlFragment extends Fragment {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults); // Call super method
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_AUDIO) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 safeShowSnackbar("Audio recording permission granted!");
-                updateControlStates(); // Enable buttons after permission is granted
+                updateControlStates();
             } else {
                 safeShowSnackbar("Audio permission is required for voice control features.");
-                // Disable functionality if permission is denied
                 buttonIdentify.setEnabled(false);
                 buttonEnrollNew.setEnabled(false);
                 fabVoiceCommand.setEnabled(false);
@@ -260,7 +291,7 @@ public class VoiceControlFragment extends Fragment {
     }
 
     /**
-     * Initiates speaker identification process.
+     * Initiates speaker identification process using Eagle
      */
     private void identifySpeaker() {
         if (isRecording || isProcessingApiCall) {
@@ -268,7 +299,14 @@ public class VoiceControlFragment extends Fragment {
             return;
         }
 
-        // Check if there are any *enrolled* profiles to identify against
+        // Check if Eagle is properly initialized
+        if (speakerService == null || !speakerService.isInitialized()) {
+            String status = speakerService != null ? speakerService.getInitializationStatus() : "Service not available";
+            safeShowSnackbar("Voice service not ready: " + status);
+            return;
+        }
+
+        // Check if there are any enrolled profiles
         boolean hasEnrolledProfiles = speakerService.getEnrolledSpeakers().stream()
                 .anyMatch(p -> "Enrolled".equalsIgnoreCase(p.getEnrollmentStatus()));
 
@@ -280,21 +318,23 @@ public class VoiceControlFragment extends Fragment {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             safeShowSnackbar("Audio permission not granted. Please grant it in settings.");
-            checkAudioPermission(); // Request permission again
+            checkAudioPermission();
             return;
         }
 
         isRecording = true;
         isProcessingApiCall = true;
-        updateRecordingUI(true, "Listening... Speak for 4 seconds for identification.");
+        updateRecordingUI(true, "Listening... Speak for a few seconds for identification.");
+        updateControlStates(); // ADDED: Update control states separately
 
-        speakerService.identifySpeaker(new AzureSpeakerIdentificationService.SpeakerIdentificationCallback() {
+        speakerService.identifySpeaker(new EagleSpeakerIdentificationService.SpeakerIdentificationCallback() {
             @Override
             public void onSpeakerIdentified(SpeakerProfile profile) {
                 isRecording = false;
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
+                    updateControlStates(); // ADDED: Update control states
                     currentSpeaker = profile;
                     updateCurrentSpeakerUI();
                     applySpeakerPreferences(profile);
@@ -308,8 +348,9 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
+                    updateControlStates(); // ADDED: Update control states
                     safeShowSnackbar("Identification failed: " + error);
-                    currentSpeaker = null; // Clear current speaker on failure
+                    currentSpeaker = null;
                     updateCurrentSpeakerUI();
                 });
             }
@@ -320,8 +361,9 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
+                    updateControlStates(); // ADDED: Update control states
                     safeShowSnackbar("Error during identification: " + error);
-                    currentSpeaker = null; // Clear current speaker on error
+                    currentSpeaker = null;
                     updateCurrentSpeakerUI();
                 });
             }
@@ -330,7 +372,6 @@ public class VoiceControlFragment extends Fragment {
 
     /**
      * Applies the speaker's lighting preferences to the Tuya device and updates UI.
-     * @param profile The SpeakerProfile whose preferences are to be applied.
      */
     private void applySpeakerPreferences(@NonNull SpeakerProfile profile) {
         if (profile == null) {
@@ -351,7 +392,6 @@ public class VoiceControlFragment extends Fragment {
             currentLightSettings.setBrightness(profile.getPreferredBrightness());
         }
 
-
         // Apply color
         tuyaService.setColor(profile.getPreferredColor());
         if (currentLightSettings != null) {
@@ -363,11 +403,10 @@ public class VoiceControlFragment extends Fragment {
             currentLightSettings.setSunsetTime(profile.getPreferredSunsetTime());
             currentLightSettings.setBedtime(profile.getPreferredBedtime());
             currentLightSettings.setAutoScheduleEnabled(profile.isAutoScheduleEnabled());
-            currentLightSettings.setUsername(profile.getUserName()); // Set username in LightSettings
+            currentLightSettings.setUsername(profile.getUserName());
         }
 
-
-        // Notify main activity or other parts of the app about the new settings
+        // Notify main activity about the new settings
         if (lightSettingsCallback != null && currentLightSettings != null) {
             lightSettingsCallback.accept(currentLightSettings);
         }
@@ -387,18 +426,18 @@ public class VoiceControlFragment extends Fragment {
         if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO)
                 != PackageManager.PERMISSION_GRANTED) {
             safeShowSnackbar("Audio permission not granted. Please grant it in settings.");
-            checkAudioPermission(); // Request permission again
+            checkAudioPermission();
             return;
         }
 
         View dialogView = LayoutInflater.from(requireContext())
-                .inflate(R.layout.dialog_enroll_speaker, null); // Make sure this layout exists
+                .inflate(R.layout.dialog_enroll_speaker, null);
 
         TextInputEditText editName = dialogView.findViewById(R.id.editSpeakerName);
 
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Enroll New Speaker")
-                .setMessage("Enter your name and record initial voice samples. Total of 20 seconds speech needed.")
+                .setMessage("Enter your name and record voice samples. About 20 seconds of speech needed.")
                 .setView(dialogView)
                 .setPositiveButton("Start Enrollment", (dialog, which) -> {
                     String name = editName.getText().toString().trim();
@@ -413,42 +452,41 @@ public class VoiceControlFragment extends Fragment {
     }
 
     /**
-     * Initiates the speaker enrollment process: first creates profile, then records audio.
-     * @param userName The name of the speaker to enroll.
+     * Initiates the speaker enrollment process using Eagle
      */
     private void startEnrollmentProcess(String userName) {
-        isProcessingApiCall = true; // Set processing flag for profile creation
+        if (speakerService == null || !speakerService.isInitialized()) {
+            String status = speakerService != null ? speakerService.getInitializationStatus() : "Service not available";
+            safeShowSnackbar("Voice service not ready: " + status);
+            return;
+        }
+
+        isProcessingApiCall = true;
         safeShowSnackbar("Creating profile for " + userName + "...");
 
-        speakerService.createSpeakerProfile(userName, new AzureSpeakerIdentificationService.CreateProfileCallback() {
-            @Override
-            public void onProfileCreated(String profileId) {
-
-            }
-
+        speakerService.createSpeakerProfile(userName, new EagleSpeakerIdentificationService.CreateProfileCallback() {
             @Override
             public void onProfileCreated(String profileId, String createdUserName) {
                 Log.d(TAG, "Profile created: " + profileId + " for " + createdUserName);
-                safeShowSnackbar("Profile created. Now starting enrollment recording...");
-                isProcessingApiCall = false; // Reset after profile creation, as recording has its own state
-                // Now start enrollment recording for this new profile
-                enrollSpeaker(profileId, createdUserName, 20); // Initial enrollment needs 20 seconds
+                safeShowSnackbar("Profile created. Starting enrollment recording...");
+                isProcessingApiCall = false;
+                // Refresh the list to show the new profile
+                refreshSpeakerList();
+                // Start enrollment recording for this new profile
+                enrollSpeaker(profileId, createdUserName, 20);
             }
 
             @Override
             public void onError(String error) {
                 isProcessingApiCall = false;
                 safeShowSnackbar("Failed to create profile: " + error);
-                updateControlStates(); // Re-enable buttons
+                updateControlStates();
             }
         });
     }
 
     /**
-     * Manages the actual voice enrollment process.
-     * @param profileId The ID of the speaker profile.
-     * @param userName The name of the speaker.
-     * @param remainingSeconds The number of remaining seconds of speech required for enrollment.
+     * Manages the voice enrollment process using Eagle
      */
     private void enrollSpeaker(String profileId, String userName, int remainingSeconds) {
         if (isRecording || isProcessingApiCall) {
@@ -458,13 +496,18 @@ public class VoiceControlFragment extends Fragment {
 
         isRecording = true;
         isProcessingApiCall = true;
-        updateRecordingUI(true, "Recording for " + userName + "... Need " + remainingSeconds + "s more speech.");
+        updateRecordingUI(true, "🎤 Recording for " + userName + "... Speak clearly and naturally!");
+        updateControlStates(); // ADDED: Update control states separately
 
-        speakerService.enrollSpeaker(profileId, new AzureSpeakerIdentificationService.EnrollmentCallback() {
+        speakerService.enrollSpeaker(profileId, new EagleSpeakerIdentificationService.EnrollmentCallback() {
             @Override
             public void onRecordingStarted() {
-                Log.d(TAG, "Enrollment recording started.");
-                safeUpdateUI(() -> Toast.makeText(requireContext(), "Start speaking now...", Toast.LENGTH_SHORT).show());
+                Log.d(TAG, "Enrollment recording started for " + userName);
+                safeUpdateUI(() -> {
+                    Toast.makeText(requireContext(), "📢 Start speaking now! Speak for at least 15 seconds.", Toast.LENGTH_LONG).show();
+                    updateRecordingUI(true, "🗣️ Keep speaking... Need clear, natural speech.");
+                    updateControlStates(); // ADDED: Update control states
+                });
             }
 
             @Override
@@ -473,28 +516,31 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    refreshSpeakerList(); // Refresh list to show updated status
-                    safeShowSnackbar("Enrollment complete for " + completedUserName + "!");
+                    updateControlStates(); // ADDED: Update control states
+                    refreshSpeakerList();
+                    safeShowSnackbar("✅ Enrollment complete for " + completedUserName + "! You can now be identified.");
+                    Toast.makeText(requireContext(), "🎉 " + completedUserName + " successfully enrolled!", Toast.LENGTH_LONG).show();
                 });
             }
 
             @Override
-            public void onEnrollmentComplete(String profileId) {
-
-            }
-
-            @Override
             public void onEnrollmentProgress(int remainingSeconds) {
-                isRecording = false; // Recording chunk finished, but enrollment isn't
-                isProcessingApiCall = false; // API call for this chunk is done
+                isRecording = false; // Recording chunk finished
+                isProcessingApiCall = false;
 
                 safeUpdateUI(() -> {
-                    updateRecordingUI(false, ""); // Hide recording UI for a moment
-                    refreshSpeakerList(); // Update list to show new remaining time
-                    safeShowSnackbar("Enrollment progress: Need " + remainingSeconds + " more seconds for " + userName + ".");
-
-                    // Option to prompt for more recording or automatically start next chunk
-                    // For simplicity, we'll prompt the user to click "Enroll More" from the list item
+                    updateRecordingUI(false, "");
+                    updateControlStates(); // ADDED: Update control states
+                    refreshSpeakerList();
+                    if (remainingSeconds > 0) {
+                        safeShowSnackbar("📈 Progress made! Need " + remainingSeconds + " more seconds for " + userName);
+                        updateRecordingUI(true, "🔄 Continue speaking... " + remainingSeconds + "s remaining");
+                        updateControlStates(); // ADDED: Update control states again for recording state
+                    } else {
+                        safeShowSnackbar("Almost done! Keep speaking clearly...");
+                        updateRecordingUI(true, "🎯 Final stage - keep speaking naturally!");
+                        updateControlStates(); // ADDED: Update control states again for recording state
+                    }
                 });
             }
 
@@ -504,76 +550,462 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    safeShowSnackbar("Enrollment error for " + userName + ": " + error);
-                    refreshSpeakerList(); // Refresh list to show potential status changes
+                    updateControlStates(); // ADDED: Update control states
+
+                    // Provide helpful error messages
+                    String userFriendlyError;
+                    if (error.contains("Please speak for longer")) {
+                        userFriendlyError = "Need more speech! Try speaking for 20-30 seconds continuously.";
+                    } else if (error.contains("audio quality")) {
+                        userFriendlyError = "Audio quality issue. Please speak closer to the microphone.";
+                    } else if (error.contains("Multiple speakers")) {
+                        userFriendlyError = "Only one person should speak during enrollment.";
+                    } else {
+                        userFriendlyError = "Enrollment error: " + error;
+                    }
+
+                    safeShowSnackbar("❌ " + userFriendlyError);
+                    refreshSpeakerList();
                 });
             }
         });
     }
 
     /**
-     * Displays a dialog to edit a speaker's lighting preferences.
-     * @param profile The SpeakerProfile to edit.
+     * Displays a dialog to edit a speaker's lighting preferences with intuitive color picker.
      */
     private void showPreferencesDialog(@NonNull SpeakerProfile profile) {
         View dialogView = LayoutInflater.from(requireContext())
-                .inflate(R.layout.dialog_speaker_preferences, null); // Make sure this layout exists
+                .inflate(R.layout.dialog_speaker_preferences, null);
 
-        // --- IMPORTANT: You need to implement these UI controls in dialog_speaker_preferences.xml ---
-        // For example:
-        // Slider for brightness: Slider sliderBrightness = dialogView.findViewById(R.id.sliderBrightness);
-        // Color picker: Some custom view or library for color selection
-        // Time pickers for sunset/bedtime: TextInputEditText editSunsetTime, editBedtime;
-        // Toggle for auto schedule: Switch switchAutoSchedule;
+        // Get UI controls
+        com.google.android.material.slider.Slider sliderBrightness = dialogView.findViewById(R.id.sliderBrightness);
+        TextView textBrightnessValue = dialogView.findViewById(R.id.textBrightnessValue);
+        View selectedColorPreview = dialogView.findViewById(R.id.selectedColorPreview);
+        TextView textSelectedColor = dialogView.findViewById(R.id.textSelectedColor);
+        TextView textSelectedColorHex = dialogView.findViewById(R.id.textSelectedColorHex);
+        TextInputEditText editCustomColor = dialogView.findViewById(R.id.editCustomColor);
+        TextInputEditText editSunsetTime = dialogView.findViewById(R.id.editSunsetTime);
+        TextInputEditText editBedtime = dialogView.findViewById(R.id.editBedtime);
+        com.google.android.material.materialswitch.MaterialSwitch switchAutoSchedule = dialogView.findViewById(R.id.switchAutoSchedule);
+
+        // Get circular color picker
+        com.smart.smartbulb.CircularColorPicker circularColorPicker = dialogView.findViewById(R.id.circularColorPicker);
+
+        // Color picker views (for quick presets)
+        View colorWarmWhite = dialogView.findViewById(R.id.colorWarmWhite);
+        View colorSoftYellow = dialogView.findViewById(R.id.colorSoftYellow);
+        View colorPureWhite = dialogView.findViewById(R.id.colorPureWhite);
+        View colorCoolWhite = dialogView.findViewById(R.id.colorCoolWhite);
+        View colorSoftBlue = dialogView.findViewById(R.id.colorSoftBlue);
+        View colorLavender = dialogView.findViewById(R.id.colorLavender);
+        View colorSoftRed = dialogView.findViewById(R.id.colorSoftRed);
+        View colorSoftGreen = dialogView.findViewById(R.id.colorSoftGreen);
+
+        // Color mapping for quick presets
+        Map<View, ColorInfo> colorMap = new HashMap<>();
+        colorMap.put(colorWarmWhite, new ColorInfo("#FFBB66", "Warm White"));
+        colorMap.put(colorSoftYellow, new ColorInfo("#FFDD99", "Soft Yellow"));
+        colorMap.put(colorPureWhite, new ColorInfo("#FFFFFF", "Pure White"));
+        colorMap.put(colorCoolWhite, new ColorInfo("#BBEEFF", "Cool White"));
+        colorMap.put(colorSoftBlue, new ColorInfo("#99CCFF", "Soft Blue"));
+        colorMap.put(colorLavender, new ColorInfo("#CC99FF", "Lavender"));
+        colorMap.put(colorSoftRed, new ColorInfo("#FFAAAA", "Soft Red"));
+        colorMap.put(colorSoftGreen, new ColorInfo("#AAFFAA", "Soft Green"));
+
+        // Track selected color view for highlighting
+        final View[] selectedColorView = {null};
+
+        // Function to update color selection highlights
+        Runnable updateColorSelection = () -> {
+            // Reset all color views to normal state
+            for (View colorView : colorMap.keySet()) {
+                try {
+                    colorView.setBackgroundResource(R.drawable.color_picker_item);
+                    ColorInfo info = colorMap.get(colorView);
+                    if (info != null) {
+                        colorView.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(info.hex)));
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error setting color view background", e);
+                }
+            }
+
+            // Highlight selected color
+            if (selectedColorView[0] != null) {
+                try {
+                    selectedColorView[0].setBackgroundResource(R.drawable.color_picker_item_selected);
+                    ColorInfo info = colorMap.get(selectedColorView[0]);
+                    if (info != null) {
+                        selectedColorView[0].setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(info.hex)));
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error setting selected color view background", e);
+                }
+            }
+        };
+
+        // Function to update all color displays when color changes
+        Consumer<ColorInfo> updateColorDisplays = (colorInfo) -> {
+            try {
+                // Update preview
+                selectedColorPreview.setBackgroundColor(Color.parseColor(colorInfo.hex));
+                textSelectedColor.setText(colorInfo.name);
+                textSelectedColorHex.setText(colorInfo.hex);
+
+                // Update custom color input
+                if (editCustomColor != null) {
+                    editCustomColor.setText(colorInfo.hex);
+                }
+
+                // Update circular color picker
+                if (circularColorPicker != null) {
+                    circularColorPicker.setColor(colorInfo.hex);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error updating color displays", e);
+            }
+        };
+
+        // Setup circular color picker listener
+        if (circularColorPicker != null) {
+            circularColorPicker.setOnColorSelectedListener(new com.smart.smartbulb.CircularColorPicker.OnColorSelectedListener() {
+                @Override
+                public void onColorSelected(int color, String hexColor) {
+                    ColorInfo colorInfo = new ColorInfo(hexColor, "Custom Color");
+
+                    // Clear preset selection
+                    selectedColorView[0] = null;
+                    updateColorSelection.run();
+
+                    // Update displays (but don't update circular picker to avoid recursion)
+                    try {
+                        selectedColorPreview.setBackgroundColor(color);
+                        textSelectedColor.setText(colorInfo.name);
+                        textSelectedColorHex.setText(hexColor);
+                        if (editCustomColor != null) {
+                            editCustomColor.setText(hexColor);
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error updating color from circular picker", e);
+                    }
+                }
+            });
+        }
+
+        // Set up color picker click listeners for quick presets
+        for (Map.Entry<View, ColorInfo> entry : colorMap.entrySet()) {
+            View colorView = entry.getKey();
+            ColorInfo colorInfo = entry.getValue();
+
+            colorView.setOnClickListener(v -> {
+                selectedColorView[0] = colorView;
+                updateColorSelection.run();
+                updateColorDisplays.accept(colorInfo);
+            });
+        }
 
         // Populate controls with current profile data
-        // Example: if (sliderBrightness != null) sliderBrightness.setValue(profile.getPreferredBrightness());
+        if (sliderBrightness != null) {
+            sliderBrightness.setValue(profile.getPreferredBrightness());
+            if (textBrightnessValue != null) {
+                textBrightnessValue.setText(profile.getPreferredBrightness() + "%");
+            }
+        }
 
+        // Set up brightness slider listener
+        if (sliderBrightness != null && textBrightnessValue != null) {
+            sliderBrightness.addOnChangeListener((slider, value, fromUser) -> {
+                textBrightnessValue.setText((int) value + "%");
+            });
+        }
+
+        // Set initial color selection
+        String currentColor = profile.getPreferredColor();
+        boolean colorFound = false;
+
+        // Check if current color matches any preset
+        for (Map.Entry<View, ColorInfo> entry : colorMap.entrySet()) {
+            if (entry.getValue().hex.equalsIgnoreCase(currentColor)) {
+                selectedColorView[0] = entry.getKey();
+                updateColorDisplays.accept(entry.getValue());
+                colorFound = true;
+                break;
+            }
+        }
+
+        if (!colorFound) {
+            // Custom color - just update displays
+            updateColorDisplays.accept(new ColorInfo(currentColor, "Custom Color"));
+        }
+
+        updateColorSelection.run();
+
+        // Set up custom color input with validation
+        if (editCustomColor != null) {
+            editCustomColor.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    String customColor = s.toString().trim();
+                    if (isValidHexColor(customColor)) {
+                        try {
+                            Color.parseColor(customColor);
+                            selectedColorView[0] = null; // Clear preset selection
+                            updateColorSelection.run();
+
+                            ColorInfo colorInfo = new ColorInfo(customColor, "Custom Color");
+                            // Update preview and circular picker
+                            selectedColorPreview.setBackgroundColor(Color.parseColor(customColor));
+                            textSelectedColor.setText(colorInfo.name);
+                            textSelectedColorHex.setText(customColor);
+
+                            if (circularColorPicker != null) {
+                                circularColorPicker.setColor(customColor);
+                            }
+                        } catch (Exception e) {
+                            // Invalid color format - ignore
+                        }
+                    }
+                }
+            });
+        }
+
+        // Set time fields
+        if (editSunsetTime != null) {
+            editSunsetTime.setText(profile.getPreferredSunsetTime());
+        }
+        if (editBedtime != null) {
+            editBedtime.setText(profile.getPreferredBedtime());
+        }
+        if (switchAutoSchedule != null) {
+            switchAutoSchedule.setChecked(profile.isAutoScheduleEnabled());
+        }
+
+        // Create and show dialog
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(profile.getUserName() + "'s Preferences")
                 .setView(dialogView)
                 .setPositiveButton("Save", (dialog, which) -> {
-                    // Save preferences by extracting values from dialogView controls
-                    saveSpeakerPreferences(profile, dialogView);
+                    saveSpeakerPreferencesFromDialog(profile, dialogView);
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
     }
 
+/**
+ * Helper method to validate hex color format
+ */
+
+private boolean isValidHexColor(String color) {
+    if (color == null || color.isEmpty()) return false;
+
+    // Add # if missing
+    if (!color.startsWith("#")) {
+        color = "#" + color;
+    }
+
+    // Check format: #RRGGBB
+    return color.matches("^#[0-9A-Fa-f]{6}$");
+}
+
     /**
-     * Saves the updated speaker preferences.
-     * @param profile The SpeakerProfile to update.
-     * @param dialogView The view containing the preference input controls.
+     * Saves the updated speaker preferences from the dialog with enhanced color picker support.
+     */
+    private void saveSpeakerPreferencesFromDialog(@NonNull SpeakerProfile profile, @NonNull View dialogView) {
+        try {
+            // Extract values from dialog controls
+            com.google.android.material.slider.Slider sliderBrightness = dialogView.findViewById(R.id.sliderBrightness);
+            TextInputEditText editCustomColor = dialogView.findViewById(R.id.editCustomColor);
+            TextInputEditText editSunsetTime = dialogView.findViewById(R.id.editSunsetTime);
+            TextInputEditText editBedtime = dialogView.findViewById(R.id.editBedtime);
+            com.google.android.material.materialswitch.MaterialSwitch switchAutoSchedule = dialogView.findViewById(R.id.switchAutoSchedule);
+            com.smart.smartbulb.CircularColorPicker circularColorPicker = dialogView.findViewById(R.id.circularColorPicker);
+
+            // Default values
+            int newBrightness = profile.getPreferredBrightness();
+            String newColor = profile.getPreferredColor();
+            String newSunsetTime = profile.getPreferredSunsetTime();
+            String newBedtime = profile.getPreferredBedtime();
+            boolean newAutoSchedule = profile.isAutoScheduleEnabled();
+
+            // Extract brightness
+            if (sliderBrightness != null) {
+                newBrightness = (int) sliderBrightness.getValue();
+            }
+
+            // Extract color - prioritize circular color picker, then custom input
+            if (circularColorPicker != null) {
+                String circularPickerColor = circularColorPicker.getSelectedColorHex();
+                if (isValidHexColor(circularPickerColor)) {
+                    newColor = circularPickerColor.toUpperCase();
+                }
+            } else if (editCustomColor != null && editCustomColor.getText() != null) {
+                String colorText = editCustomColor.getText().toString().trim();
+                if (isValidHexColor(colorText)) {
+                    if (!colorText.startsWith("#")) {
+                        colorText = "#" + colorText;
+                    }
+                    try {
+                        Color.parseColor(colorText); // Validate
+                        newColor = colorText.toUpperCase();
+                    } catch (Exception e) {
+                        Log.w(TAG, "Invalid color format: " + colorText);
+                    }
+                }
+            }
+
+            // Extract sunset time
+            if (editSunsetTime != null && editSunsetTime.getText() != null) {
+                String timeText = editSunsetTime.getText().toString().trim();
+                if (!timeText.isEmpty() && timeText.matches("^\\d{1,2}:\\d{2}$")) {
+                    newSunsetTime = timeText;
+                }
+            }
+
+            // Extract bedtime
+            if (editBedtime != null && editBedtime.getText() != null) {
+                String timeText = editBedtime.getText().toString().trim();
+                if (!timeText.isEmpty() && timeText.matches("^\\d{1,2}:\\d{2}$")) {
+                    newBedtime = timeText;
+                }
+            }
+
+            // Extract auto schedule
+            if (switchAutoSchedule != null) {
+                newAutoSchedule = switchAutoSchedule.isChecked();
+            }
+
+            // Update the speaker preferences
+            speakerService.updateSpeakerPreferences(
+                    profile.getProfileId(),
+                    newBrightness,
+                    newColor,
+                    newSunsetTime,
+                    newBedtime,
+                    newAutoSchedule
+            );
+
+            refreshSpeakerList();
+            safeShowSnackbar("✅ Preferences updated for " + profile.getUserName());
+
+            // Show a summary of what was saved
+            String summary = String.format("💡 %s's preferences updated:\n🔆 Brightness: %d%%\n🎨 Color: %s\n⏰ Sunset: %s, Bedtime: %s",
+                    profile.getUserName(), newBrightness, getColorName(newColor), newSunsetTime, newBedtime);
+            Toast.makeText(requireContext(), summary, Toast.LENGTH_LONG).show();
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving speaker preferences", e);
+            safeShowSnackbar("❌ Error saving preferences: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Helper class to store color information
+     */
+    private static class ColorInfo {
+        final String hex;
+        final String name;
+
+        ColorInfo(String hex, String name) {
+            this.hex = hex;
+            this.name = name;
+        }
+    }
+    /**
+     * Saves the updated speaker preferences with color picker support.
      */
     private void saveSpeakerPreferences(@NonNull SpeakerProfile profile, @NonNull View dialogView) {
-        // --- IMPORTANT: You need to extract actual values from your dialog's UI controls ---
-        // For demonstration, using existing profile values. You'd get these from dialogView.
-        int newBrightness = profile.getPreferredBrightness(); // Replace with actual value from dialog
-        String newColor = profile.getPreferredColor();       // Replace with actual value from dialog
-        String newSunsetTime = profile.getPreferredSunsetTime(); // Replace with actual value from dialog
-        String newBedtime = profile.getPreferredBedtime();     // Replace with actual value from dialog
-        boolean newAutoSchedule = profile.isAutoScheduleEnabled(); // Replace with actual value from dialog
+        try {
+            // Extract values from dialog controls
+            com.google.android.material.slider.Slider sliderBrightness = dialogView.findViewById(R.id.sliderBrightness);
+            TextInputEditText editCustomColor = dialogView.findViewById(R.id.editCustomColor);
+            TextInputEditText editSunsetTime = dialogView.findViewById(R.id.editSunsetTime);
+            TextInputEditText editBedtime = dialogView.findViewById(R.id.editBedtime);
+            com.google.android.material.materialswitch.MaterialSwitch switchAutoSchedule = dialogView.findViewById(R.id.switchAutoSchedule);
 
-        // Example of extracting from a hypothetical TextInputEditText:
-        // TextInputEditText editBrightness = dialogView.findViewById(R.id.editBrightness);
-        // try { newBrightness = Integer.parseInt(editBrightness.getText().toString()); } catch (NumberFormatException e) {/* handle error */}
+            int newBrightness = profile.getPreferredBrightness();
+            String newColor = profile.getPreferredColor();
+            String newSunsetTime = profile.getPreferredSunsetTime();
+            String newBedtime = profile.getPreferredBedtime();
+            boolean newAutoSchedule = profile.isAutoScheduleEnabled();
 
-        speakerService.updateSpeakerPreferences(
-                profile.getProfileId(),
-                newBrightness,
-                newColor,
-                newSunsetTime,
-                newBedtime,
-                newAutoSchedule
-        );
+            // Extract brightness
+            if (sliderBrightness != null) {
+                newBrightness = (int) sliderBrightness.getValue();
+            }
 
-        refreshSpeakerList();
-        safeShowSnackbar("Preferences updated for " + profile.getUserName());
+            // Extract color from custom color input
+            if (editCustomColor != null && editCustomColor.getText() != null) {
+                String colorText = editCustomColor.getText().toString().trim();
+                if (!colorText.isEmpty()) {
+                    if (!colorText.startsWith("#")) {
+                        colorText = "#" + colorText;
+                    }
+                    // Validate hex color format
+                    if (colorText.matches("^#[0-9A-Fa-f]{6}$")) {
+                        try {
+                            Color.parseColor(colorText); // Test if it's a valid color
+                            newColor = colorText.toUpperCase();
+                        } catch (Exception e) {
+                            Log.w(TAG, "Invalid color format: " + colorText);
+                        }
+                    }
+                }
+            }
+
+            // Extract sunset time
+            if (editSunsetTime != null && editSunsetTime.getText() != null) {
+                String timeText = editSunsetTime.getText().toString().trim();
+                if (!timeText.isEmpty() && timeText.matches("^\\d{1,2}:\\d{2}$")) {
+                    newSunsetTime = timeText;
+                }
+            }
+
+            // Extract bedtime
+            if (editBedtime != null && editBedtime.getText() != null) {
+                String timeText = editBedtime.getText().toString().trim();
+                if (!timeText.isEmpty() && timeText.matches("^\\d{1,2}:\\d{2}$")) {
+                    newBedtime = timeText;
+                }
+            }
+
+            // Extract auto schedule
+            if (switchAutoSchedule != null) {
+                newAutoSchedule = switchAutoSchedule.isChecked();
+            }
+
+            // Update the speaker preferences
+            speakerService.updateSpeakerPreferences(
+                    profile.getProfileId(),
+                    newBrightness,
+                    newColor,
+                    newSunsetTime,
+                    newBedtime,
+                    newAutoSchedule
+            );
+
+            refreshSpeakerList();
+            safeShowSnackbar("✅ Preferences updated for " + profile.getUserName());
+
+            // Show a summary of what was saved
+            String summary = String.format("💡 %s's preferences updated:\n🔆 Brightness: %d%%\n🎨 Color: %s\n⏰ Sunset: %s, Bedtime: %s",
+                    profile.getUserName(), newBrightness, getColorName(newColor), newSunsetTime, newBedtime);
+            Toast.makeText(requireContext(), summary, Toast.LENGTH_LONG).show();
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving speaker preferences", e);
+            safeShowSnackbar("❌ Error saving preferences: " + e.getMessage());
+        }
     }
 
     /**
      * Confirms and then initiates deletion of a speaker profile.
-     * @param profile The SpeakerProfile to delete.
      */
     private void confirmDeleteSpeaker(@NonNull SpeakerProfile profile) {
         new MaterialAlertDialogBuilder(requireContext())
@@ -587,21 +1019,21 @@ public class VoiceControlFragment extends Fragment {
     }
 
     /**
-     * Deletes a speaker profile from Azure and local storage.
-     * @param profile The SpeakerProfile to delete.
+     * Deletes a speaker profile.
      */
     private void deleteSpeaker(@NonNull SpeakerProfile profile) {
         isProcessingApiCall = true;
         safeShowSnackbar("Deleting profile for " + profile.getUserName() + "...");
+
         speakerService.deleteSpeakerProfile(profile.getProfileId(),
-                new AzureSpeakerIdentificationService.DeleteProfileCallback() {
+                new EagleSpeakerIdentificationService.DeleteProfileCallback() {
                     @Override
                     public void onProfileDeleted(String profileId) {
                         isProcessingApiCall = false;
                         safeUpdateUI(() -> {
-                            refreshSpeakerList(); // Update UI list
+                            refreshSpeakerList();
                             if (currentSpeaker != null && currentSpeaker.getProfileId().equals(profileId)) {
-                                currentSpeaker = null; // Clear current speaker if it was the one deleted
+                                currentSpeaker = null;
                                 updateCurrentSpeakerUI();
                             }
                             safeShowSnackbar("Speaker profile deleted successfully.");
@@ -613,15 +1045,36 @@ public class VoiceControlFragment extends Fragment {
                         isProcessingApiCall = false;
                         safeUpdateUI(() -> {
                             safeShowSnackbar("Failed to delete profile: " + error);
-                            updateControlStates(); // Re-enable buttons
+                            updateControlStates();
                         });
                     }
                 });
     }
 
     /**
-     * Placeholder for future voice command processing.
+     * Shows dialog to clear all speaker profiles (for reset/debugging)
      */
+    private void showClearProfilesDialog() {
+        int profileCount = speakerService.getEnrolledSpeakers().size();
+        if (profileCount == 0) {
+            safeShowSnackbar("No profiles to clear");
+            return;
+        }
+
+        new MaterialAlertDialogBuilder(requireContext())
+                .setTitle("⚠️ Clear All Profiles")
+                .setMessage("This will permanently delete all " + profileCount + " enrolled speaker profiles. This action cannot be undone.\n\nAre you sure?")
+                .setPositiveButton("Clear All", (dialog, which) -> {
+                    speakerService.clearStoredProfiles();
+                    refreshSpeakerList();
+                    currentSpeaker = null;
+                    updateCurrentSpeakerUI();
+                    safeShowSnackbar("✅ All speaker profiles cleared");
+                    Toast.makeText(requireContext(), "All profiles deleted. You'll need to enroll again.", Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
     private void processVoiceCommand() {
         safeShowSnackbar("Voice commands are under development!");
         // Future: Implement voice commands like "dim lights", "turn on sunset mode", etc.
@@ -637,33 +1090,79 @@ public class VoiceControlFragment extends Fragment {
     /**
      * Enables/disables UI controls based on recording/processing state and Tuya connection.
      */
+    // Replace these two methods in your VoiceControlFragment.java
+
+    /**
+     * Enables/disables UI controls based on recording/processing state and Tuya connection.
+     */
     private void updateControlStates() {
         boolean isAudioPermissionGranted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-        boolean canControl = tuyaService != null && tuyaService.isConnected() && isAudioPermissionGranted;
+        boolean isTuyaConnected = tuyaService != null && tuyaService.isConnected();
+        boolean isEagleReady = speakerService != null && speakerService.isInitialized() && !speakerService.isInitializing();
+        boolean canControl = isTuyaConnected && isAudioPermissionGranted && isEagleReady;
+
+        Log.d(TAG, String.format("Control states - Audio: %s, Tuya: %s, Eagle: %s, CanControl: %s",
+                isAudioPermissionGranted, isTuyaConnected, isEagleReady, canControl));
 
         // Disable interaction if recording or an API call is in progress
         buttonIdentify.setEnabled(canControl && !isRecording && !isProcessingApiCall);
         buttonEnrollNew.setEnabled(canControl && !isRecording && !isProcessingApiCall);
         fabVoiceCommand.setEnabled(canControl && !isRecording && !isProcessingApiCall);
 
-        // Ensure RecyclerView items are also disabled if recording/processing
+        // Show initialization status ONLY if Eagle is initializing
+        if (speakerService != null && speakerService.isInitializing()) {
+            String status = speakerService.getInitializationStatus();
+            // REMOVED: updateRecordingUI call to break circular reference
+            // Instead, directly update the recording UI elements
+            if (progressRecording != null && recordingStatusContainer != null && textRecordingStatus != null) {
+                progressRecording.setVisibility(View.VISIBLE);
+                textRecordingStatus.setText(status);
+                recordingStatusContainer.setVisibility(View.VISIBLE);
+            }
+        } else if (speakerService != null && !speakerService.isInitialized()) {
+            // Show error state but don't use recording UI for this
+            String status = speakerService.getInitializationStatus();
+            Log.w(TAG, "Eagle not initialized: " + status);
+            // Hide any initialization UI if Eagle failed to initialize
+            if (progressRecording != null && recordingStatusContainer != null) {
+                progressRecording.setVisibility(View.GONE);
+                recordingStatusContainer.setVisibility(View.GONE);
+            }
+        } else {
+            // Eagle is ready - hide initialization UI
+            if (!isRecording && !isProcessingApiCall && progressRecording != null && recordingStatusContainer != null) {
+                progressRecording.setVisibility(View.GONE);
+                recordingStatusContainer.setVisibility(View.GONE);
+            }
+        }
+
+        // Ensure RecyclerView items are also properly enabled/disabled
         if (speakerAdapter != null) {
-            speakerAdapter.setInteractionEnabled(!isRecording && !isProcessingApiCall);
+            speakerAdapter.setInteractionEnabled(!isRecording && !isProcessingApiCall && isEagleReady);
         }
     }
 
     /**
      * Shows/hides the recording status UI.
-     * @param recording True to show, false to hide.
-     * @param statusText The text to display.
+     * FIXED: Removed circular call to updateControlStates()
+     */
+
+
+
+    /**
+     * Shows/hides the recording status UI.
      */
     private void updateRecordingUI(boolean recording, String statusText) {
-        if (recordingStatusContainer != null) {
+        if (recordingStatusContainer != null && progressRecording != null && textRecordingStatus != null) {
             progressRecording.setVisibility(recording ? View.VISIBLE : View.GONE);
             textRecordingStatus.setText(statusText);
-            recordingStatusContainer.setVisibility(recording ? View.VISIBLE : View.GONE); // Show/hide the entire container
+            recordingStatusContainer.setVisibility(recording ? View.VISIBLE : View.GONE);
         }
-        updateControlStates(); // Re-evaluate button states
+
+        // REMOVED: updateControlStates() call to break circular reference
+        // The control states should be updated separately when needed
+
+        Log.d(TAG, "Recording UI updated - Recording: " + recording + ", Status: " + statusText);
     }
 
     /**
@@ -685,9 +1184,6 @@ public class VoiceControlFragment extends Fragment {
             textSpeakerPreferences.setText(preferences);
         } else {
             cardCurrentSpeaker.setVisibility(View.GONE);
-            // Optionally display a default message when no speaker is identified
-            // textCurrentSpeaker.setText("No Speaker Identified");
-            // textSpeakerPreferences.setText("Perform identification to apply preferences.");
         }
     }
 
@@ -695,8 +1191,17 @@ public class VoiceControlFragment extends Fragment {
      * Refreshes the list of enrolled speakers displayed in the RecyclerView.
      */
     private void refreshSpeakerList() {
+        if (speakerService == null) {
+            Log.w(TAG, "SpeakerService is null, cannot refresh speaker list");
+            return;
+        }
+
         List<SpeakerProfile> speakers = speakerService.getEnrolledSpeakers();
-        speakerAdapter.updateSpeakers(speakers);
+        Log.d(TAG, "Refreshing speaker list with " + speakers.size() + " profiles");
+
+        if (speakerAdapter != null) {
+            speakerAdapter.updateSpeakers(speakers);
+        }
 
         // Show/hide empty state based on whether there are any profiles
         if (speakers.isEmpty()) {
@@ -709,6 +1214,7 @@ public class VoiceControlFragment extends Fragment {
             if (textEnrolledTitle != null) {
                 textEnrolledTitle.setVisibility(View.GONE);
             }
+            Log.d(TAG, "Showing empty state - no profiles found");
         } else {
             if (cardEmptyState != null) {
                 cardEmptyState.setVisibility(View.GONE);
@@ -719,14 +1225,15 @@ public class VoiceControlFragment extends Fragment {
             if (textEnrolledTitle != null) {
                 textEnrolledTitle.setVisibility(View.VISIBLE);
             }
+            Log.d(TAG, "Showing speaker list with " + speakers.size() + " profiles");
         }
     }
+
 
     /**
      * Helper to get a human-readable name for a hex color.
      */
     private String getColorName(String hexColor) {
-        // This mapping should ideally be consistent with your LightSettings or a central color utility
         if (hexColor == null) return "N/A";
         switch (hexColor.toUpperCase()) {
             case "#FFBB66": return "Warm White";
@@ -737,11 +1244,11 @@ public class VoiceControlFragment extends Fragment {
             case "#CC99FF": return "Lavender";
             case "#FFAAAA": return "Soft Red";
             case "#AAFFAA": return "Soft Green";
-            default: return hexColor; // Return hex if no name found
+            default: return hexColor;
         }
     }
 
-    // --- Safe UI Update Helpers (ensures updates happen on UI thread and fragment is active) ---
+    // --- Safe UI Update Helpers ---
     private void safeUpdateUI(Runnable updateTask) {
         if (isAdded() && getActivity() != null) {
             getActivity().runOnUiThread(updateTask);
@@ -751,7 +1258,7 @@ public class VoiceControlFragment extends Fragment {
     private void safeShowSnackbar(String message) {
         safeUpdateUI(() -> {
             if (rootView != null) {
-                Snackbar.make(rootView, message, Snackbar.LENGTH_LONG).show(); // Changed to LONG for better visibility
+                Snackbar.make(rootView, message, Snackbar.LENGTH_LONG).show();
             }
         });
     }
@@ -768,25 +1275,30 @@ public class VoiceControlFragment extends Fragment {
     public void onResume() {
         super.onResume();
         Log.d(TAG, "VoiceControlFragment onResume");
-        // Reconnect Tuya if needed, and refresh UI state
+
+        // Reconnect Tuya if needed
         if (tuyaService != null && !tuyaService.isConnected()) {
             tuyaService.connect();
         }
-        updateUI(); // Ensure UI reflects current state (e.g., after returning from settings)
+
+        // Always refresh UI state
+        updateUI();
+
+        // Refresh speaker list to ensure it's up to date
+        refreshSpeakerList();
     }
 
     @Override
     public void onPause() {
         super.onPause();
         Log.d(TAG, "VoiceControlFragment onPause");
-        // Ensure any ongoing recording is stopped to prevent resource leaks
-        if (isRecording) {
-            // It's generally better to stop recording in the service itself,
-            // but as a failsafe, ensure the flag is reset here if needed.
-            // speakerService.stopRecording(); // Assuming you add a public stop method to your service
+        // Stop any ongoing recording to prevent resource leaks
+        if (isRecording && speakerService != null) {
+            speakerService.stopRecording();
             isRecording = false;
             isProcessingApiCall = false;
             updateRecordingUI(false, "");
+            updateControlStates(); // ADDED: Update control states after stopping
         }
     }
 
@@ -794,12 +1306,15 @@ public class VoiceControlFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         Log.d(TAG, "VoiceControlFragment onDestroyView");
-        // Disconnect Tuya service to release resources
+
+        // Clean up services
         if (tuyaService != null) {
             tuyaService.disconnect();
         }
-        // Ensure audio recording is stopped if still active
-        // You might need a public method in AzureSpeakerIdentificationService to force stop all operations.
+
+        if (speakerService != null) {
+            speakerService.cleanup();
+        }
     }
 
     /**
@@ -811,12 +1326,12 @@ public class VoiceControlFragment extends Fragment {
             void onSpeakerSelected(SpeakerProfile profile);
             void onEditPreferences(SpeakerProfile profile);
             void onDeleteSpeaker(SpeakerProfile profile);
-            void onEnrollMore(SpeakerProfile profile); // New action for incomplete enrollments
+            void onEnrollMore(SpeakerProfile profile);
         }
 
         private List<SpeakerProfile> speakers;
         private SpeakerActionListener listener;
-        private boolean interactionEnabled = true; // New flag to control item clickability
+        private boolean interactionEnabled = true;
 
         public SpeakerAdapter(List<SpeakerProfile> speakers, SpeakerActionListener listener) {
             this.speakers = speakers;
@@ -825,13 +1340,13 @@ public class VoiceControlFragment extends Fragment {
 
         public void updateSpeakers(List<SpeakerProfile> speakers) {
             this.speakers = speakers;
-            notifyDataSetChanged(); // Notify adapter that data has changed
+            notifyDataSetChanged();
         }
 
         public void setInteractionEnabled(boolean enabled) {
             if (this.interactionEnabled != enabled) {
                 this.interactionEnabled = enabled;
-                notifyDataSetChanged(); // Rebind views to update clickable state
+                notifyDataSetChanged();
             }
         }
 
@@ -839,14 +1354,14 @@ public class VoiceControlFragment extends Fragment {
         @Override
         public SpeakerViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_speaker_profile, parent, false); // Make sure this layout exists
+                    .inflate(R.layout.item_speaker_profile, parent, false);
             return new SpeakerViewHolder(view);
         }
 
         @Override
         public void onBindViewHolder(@NonNull SpeakerViewHolder holder, int position) {
             SpeakerProfile profile = speakers.get(position);
-            holder.bind(profile, listener, interactionEnabled); // Pass interaction state
+            holder.bind(profile, listener, interactionEnabled);
         }
 
         @Override
@@ -857,23 +1372,23 @@ public class VoiceControlFragment extends Fragment {
         static class SpeakerViewHolder extends RecyclerView.ViewHolder {
             private TextView textName;
             private TextView textLastSeen;
-            private TextView textEnrollmentStatus; // New TextView for enrollment status
+            private TextView textEnrollmentStatus;
             private View colorIndicator;
             private Button buttonApply;
             private Button buttonEdit;
             private Button buttonDelete;
-            private Button buttonEnrollMore; // New button for "Enroll More"
+            private Button buttonEnrollMore;
 
             public SpeakerViewHolder(@NonNull View itemView) {
                 super(itemView);
                 textName = itemView.findViewById(R.id.textSpeakerName);
                 textLastSeen = itemView.findViewById(R.id.textLastSeen);
-                textEnrollmentStatus = itemView.findViewById(R.id.textEnrollmentStatus); // Make sure this ID exists
+                textEnrollmentStatus = itemView.findViewById(R.id.textEnrollmentStatus);
                 colorIndicator = itemView.findViewById(R.id.colorIndicator);
                 buttonApply = itemView.findViewById(R.id.buttonApply);
                 buttonEdit = itemView.findViewById(R.id.buttonEdit);
                 buttonDelete = itemView.findViewById(R.id.buttonDelete);
-                buttonEnrollMore = itemView.findViewById(R.id.buttonEnrollMore); // Make sure this ID exists
+                buttonEnrollMore = itemView.findViewById(R.id.buttonEnrollMore);
             }
 
             public void bind(@NonNull SpeakerProfile profile, @NonNull SpeakerActionListener listener, boolean interactionEnabled) {
@@ -895,9 +1410,8 @@ public class VoiceControlFragment extends Fragment {
                     textLastSeen.setText("Last identified: " + lastSeen);
                     textLastSeen.setVisibility(View.VISIBLE);
                 } else {
-                    textLastSeen.setVisibility(View.GONE); // Hide if never identified
+                    textLastSeen.setVisibility(View.GONE);
                 }
-
 
                 // Display enrollment status
                 String status = profile.getEnrollmentStatus();
@@ -905,35 +1419,34 @@ public class VoiceControlFragment extends Fragment {
                 if ("Enrolled".equalsIgnoreCase(status)) {
                     textEnrollmentStatus.setTextColor(ContextCompat.getColor(itemView.getContext(), android.R.color.holo_green_dark));
                     buttonApply.setVisibility(View.VISIBLE);
-                    buttonEnrollMore.setVisibility(View.GONE); // Hide enroll more if already enrolled
+                    buttonEnrollMore.setVisibility(View.GONE);
                 } else {
                     textEnrollmentStatus.setTextColor(ContextCompat.getColor(itemView.getContext(), android.R.color.holo_orange_dark));
                     textEnrollmentStatus.append(" (" + profile.getRemainingEnrollmentsSpeechLength() + "s needed)");
-                    buttonApply.setVisibility(View.GONE); // Cannot apply preferences if not fully enrolled
-                    buttonEnrollMore.setVisibility(View.VISIBLE); // Show enroll more
+                    buttonApply.setVisibility(View.GONE);
+                    buttonEnrollMore.setVisibility(View.VISIBLE);
                 }
-
 
                 // Set color indicator
                 try {
                     colorIndicator.setBackgroundColor(Color.parseColor(profile.getPreferredColor()));
                 } catch (Exception e) {
                     Log.e("SpeakerViewHolder", "Invalid color hex: " + profile.getPreferredColor(), e);
-                    colorIndicator.setBackgroundColor(Color.WHITE); // Default to white on error
+                    colorIndicator.setBackgroundColor(Color.WHITE);
                 }
 
-                // Set button listeners and manage enable state
+                // Set button listeners and enable state
                 buttonApply.setOnClickListener(v -> listener.onSpeakerSelected(profile));
                 buttonEdit.setOnClickListener(v -> listener.onEditPreferences(profile));
                 buttonDelete.setOnClickListener(v -> listener.onDeleteSpeaker(profile));
                 buttonEnrollMore.setOnClickListener(v -> listener.onEnrollMore(profile));
 
-                // Control button and item clickability based on fragment's overall interaction state
+                // Control button and item clickability
                 itemView.setEnabled(interactionEnabled);
-                buttonApply.setEnabled(interactionEnabled && "Enrolled".equalsIgnoreCase(status)); // Can only apply if enrolled
+                buttonApply.setEnabled(interactionEnabled && "Enrolled".equalsIgnoreCase(status));
                 buttonEdit.setEnabled(interactionEnabled);
                 buttonDelete.setEnabled(interactionEnabled);
-                buttonEnrollMore.setEnabled(interactionEnabled && !"Enrolled".equalsIgnoreCase(status)); // Can only enroll more if not yet enrolled
+                buttonEnrollMore.setEnabled(interactionEnabled && !"Enrolled".equalsIgnoreCase(status));
             }
         }
     }

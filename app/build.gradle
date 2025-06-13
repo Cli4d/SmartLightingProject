@@ -55,4 +55,8 @@ dependencies {
 
     // Core utilities
     implementation 'androidx.core:core:1.12.0'
+
+    // PicoVoice Eagle for Speaker Identification
+    implementation 'ai.picovoice:eagle-android:1.0.1'
+    implementation 'ai.picovoice:android-voice-processor:1.0.2'
 }
