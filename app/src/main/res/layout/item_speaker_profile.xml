@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="4dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/md_theme_outline"
+    app:cardBackgroundColor="@color/md_theme_surfaceContainer">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <View
+            android:id="@+id/colorIndicator"
+            android:layout_width="4dp"
+            android:layout_height="0dp"
+            android:background="#FFDD99"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/iconSpeaker"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="12dp"
+            android:src="@drawable/ic_account_circle"
+            app:tint="@color/md_theme_primary"
+            app:layout_constraintStart_toEndOf="@+id/colorIndicator"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/textSpeakerName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
+            android:text="John Doe"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="@color/md_theme_onSurface"
+            app:layout_constraintEnd_toStartOf="@+id/buttonApply"
+            app:layout_constraintStart_toEndOf="@+id/iconSpeaker"
+            app:layout_constraintTop_toTopOf="@+id/iconSpeaker" />
+
+        <TextView
+            android:id="@+id/textLastSeen"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
+            android:text="Last seen: 2 hours ago"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            app:layout_constraintBottom_toBottomOf="@+id/iconSpeaker"
+            app:layout_constraintEnd_toStartOf="@+id/buttonApply"
+            app:layout_constraintStart_toEndOf="@+id/iconSpeaker" />
+
+        <TextView
+            android:id="@+id/textEnrollmentStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="8dp"
+            android:text="Enrollment: Complete"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/iconSpeaker"
+            app:layout_constraintTop_toBottomOf="@+id/textLastSeen" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonApply"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Apply"
+            android:textSize="12sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="end"
+            android:orientation="horizontal"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/iconSpeaker"
+            app:layout_constraintTop_toBottomOf="@+id/textEnrollmentStatus"> <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonEnrollMore"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginEnd="4dp"
+            android:text="Enroll More"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonEdit"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                app:icon="@drawable/ic_edit"
+                app:iconSize="18dp"
+                app:iconTint="@color/md_theme_onSurfaceVariant" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonDelete"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                app:icon="@drawable/ic_delete"
+                app:iconSize="18dp"
+                app:iconTint="@color/md_theme_error" />
+
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>

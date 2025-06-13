@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+
+    <color name="md_theme_primary">#006874</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_primaryContainer">#9CEFFF</color>
+    <color name="md_theme_onPrimaryContainer">#001F24</color>
+
+    <color name="md_theme_secondary">#4A6267</color>
+    <color name="md_theme_onSecondary">#FFFFFF</color>
+    <color name="md_theme_secondaryContainer">#CDE7EC</color>
+    <color name="md_theme_onSecondaryContainer">#051F23</color>
+
+    <color name="md_theme_tertiary">#525E7D</color>
+    <color name="md_theme_onTertiary">#FFFFFF</color>
+    <color name="md_theme_tertiaryContainer">#DAE2FF</color>
+    <color name="md_theme_onTertiaryContainer">#0E1B37</color>
+
+    <color name="md_theme_error">#BA1A1A</color>
+    <color name="md_theme_onError">#FFFFFF</color>
+    <color name="md_theme_errorContainer">#FFDAD6</color>
+    <color name="md_theme_onErrorContainer">#410002</color>
+
+    <color name="md_theme_background">#F8FDFF</color>
+    <color name="md_theme_onBackground">#191C1D</color>
+
+    <color name="md_theme_surface">#F8FDFF</color>
+    <color name="md_theme_onSurface">#191C1D</color>
+    <color name="md_theme_surfaceVariant">#DBE4E6</color>
+    <color name="md_theme_onSurfaceVariant">#3F484A</color>
+
+    <color name="md_theme_outline">#6F797A</color>
+    <color name="md_theme_outlineVariant">#BFC8CA</color>
+
+    <color name="md_theme_surfaceContainerLowest">#FFFFFF</color>
+    <color name="md_theme_surfaceContainerLow">#F2F7F9</color>
+    <color name="md_theme_surfaceContainer">#ECF1F3</color>
+    <color name="md_theme_surfaceContainerHigh">#E6EBEC</color>
+    <color name="md_theme_surfaceContainerHighest">#E0E6E7</color>
+
+    <!-- Custom app colors -->
+    <color name="bulb_yellow">#FFDD99</color>
+    <color name="bulb_warm">#FFBB66</color>
+    <color name="bulb_cool">#BBEEFF</color>
+    <!-- Status Colors for Tuya Connection -->
+    <color name="success_green">#4CAF50</color>
+    <color name="error_red">#F44336</color>
+</resources>

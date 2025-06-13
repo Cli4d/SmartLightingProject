@@ -1,0 +1,49 @@
+<resources>
+    <!-- App Name -->
+    <string name="app_name">Smart Light-Beta</string>
+
+    <!-- Navigation -->
+    <string name="home">Home</string>
+    <string name="notifications">Notifications</string>
+    <string name="settings">Settings</string>
+
+    <!-- Home Fragment -->
+    <string name="current_status">Current Status</string>
+    <string name="current_time_placeholder">Time: %1$s</string>
+    <string name="light_on">Light On</string>
+    <string name="brightness_control">Brightness Control</string>
+    <string name="brightness_value">Brightness: %1$d%%</string>
+    <string name="dim_to_20">Dim to 20%</string>
+    <string name="brighten_to_80">Brighten to 80%</string>
+    <string name="ambient_light">Ambient Light</string>
+    <string name="ambient_light_value">Current level: %1$d%%</string>
+    <string name="lights_dimmed_bedtime">Lights are dimmed for bedtime</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Notifications Fragment -->
+    <string name="no_notifications_yet">No notifications yet</string>
+
+    <!-- Settings Fragment -->
+    <string name="bedtime_settings">Bedtime Settings</string>
+    <string name="set_bedtime">Set Bedtime</string>
+    <string name="bedtime_info">Lights will automatically dim to 20% at this time</string>
+    <string name="light_color">Light Color</string>
+    <string name="select_color">Select Color</string>
+    <string name="user_profile">User Profile</string>
+    <string name="username">Username</string>
+    <string name="save">Save</string>
+
+    <!-- Notifications -->
+    <string name="notification_dimming">Bedtime reached. Lights dimmed to 20%</string>
+    <string name="notification_brightening">Good morning! Lights brightened to 80%</string>
+    <string name="notification_dimming_canceled">Dimming canceled. Lights brightened to 80%</string>
+
+
+
+
+    <!-- Additional notification messages for sunset -->
+    <string name="notification_sunset">Sunset mode activated. Lights dimmed to 80% for evening comfort.</string>
+    <string name="notification_schedule_enabled">Auto schedule enabled. Lights will adjust automatically.</string>
+    <string name="notification_schedule_disabled">Auto schedule disabled. Manual control active.</string>
+
+</resources>

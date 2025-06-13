@@ -1,0 +1,401 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Brightness Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Preferred Brightness"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="@color/md_theme_onSurface" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_brightness_low"
+                app:tint="@color/md_theme_onSurfaceVariant" />
+
+            <SeekBar
+                android:id="@+id/seekBarPreferenceBrightness"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginHorizontal="16dp"
+                android:max="100"
+                android:progress="80" />
+
+            <TextView
+                android:id="@+id/textPreferenceBrightnessValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="80%"
+                android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                android:textColor="@color/md_theme_onSurface"
+                android:minWidth="40dp"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+        <!-- Color Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Preferred Color"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="@color/md_theme_onSurface" />
+
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/colorPreferenceContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="4dp">
+
+                <!-- Warm White -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorWarmWhite"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#FFBB66"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#FFBB66" />
+
+                    <ImageView
+                        android:id="@+id/checkWarmWhite"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+                <!-- Soft Yellow -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorSoftYellow"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#FFDD99"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#FFDD99" />
+
+                    <ImageView
+                        android:id="@+id/checkSoftYellow"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+                <!-- Pure White -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorPureWhite"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#FFFFFF"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#FFFFFF" />
+
+                    <ImageView
+                        android:id="@+id/checkPureWhite"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_primary" />
+                </FrameLayout>
+
+                <!-- Cool White -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorCoolWhite"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#BBEEFF"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#BBEEFF" />
+
+                    <ImageView
+                        android:id="@+id/checkCoolWhite"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+                <!-- Soft Blue -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorSoftBlue"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#99CCFF"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#99CCFF" />
+
+                    <ImageView
+                        android:id="@+id/checkSoftBlue"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+                <!-- Lavender -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorLavender"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#CC99FF"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#CC99FF" />
+
+                    <ImageView
+                        android:id="@+id/checkLavender"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+                <!-- Soft Red -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorSoftRed"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#FFAAAA"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#FFAAAA" />
+
+                    <ImageView
+                        android:id="@+id/checkSoftRed"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+                <!-- Soft Green -->
+                <FrameLayout
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_margin="4dp">
+
+                    <View
+                        android:id="@+id/colorSoftGreen"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/circle_color_selector"
+                        android:backgroundTint="#AAFFAA"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:tag="#AAFFAA" />
+
+                    <ImageView
+                        android:id="@+id/checkSoftGreen"
+                        android:layout_width="24dp"
+                        android:layout_height="24dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_check"
+                        android:visibility="gone"
+                        app:tint="@color/md_theme_onPrimary" />
+                </FrameLayout>
+
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- Schedule Section -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Schedule Settings"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="@color/md_theme_onSurface" />
+
+        <!-- Auto Schedule Switch -->
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/switchPreferenceAutoSchedule"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Enable Auto Schedule"
+            android:checked="true" />
+
+        <!-- Sunset Time -->
+        <LinearLayout
+            android:id="@+id/layoutSunsetTime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:padding="8dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_sunset"
+                app:tint="@color/md_theme_tertiary" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="16dp"
+                android:text="Sunset Time"
+                android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                android:textColor="@color/md_theme_onSurface" />
+
+            <TextView
+                android:id="@+id/textPreferenceSunsetTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="18:30"
+                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                android:textColor="@color/md_theme_primary" />
+
+        </LinearLayout>
+
+        <!-- Bedtime -->
+        <LinearLayout
+            android:id="@+id/layoutBedtime"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="?attr/selectableItemBackground"
+            android:padding="8dp">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_moon"
+                app:tint="@color/md_theme_secondary" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="16dp"
+                android:text="Bedtime"
+                android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                android:textColor="@color/md_theme_onSurface" />
+
+            <TextView
+                android:id="@+id/textPreferenceBedtime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="22:00"
+                android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                android:textColor="@color/md_theme_primary" />
+
+        </LinearLayout>
+
+        <!-- Info Text -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="These preferences will be applied automatically when you are identified"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            android:alpha="0.8" />
+
+    </LinearLayout>
+</ScrollView>

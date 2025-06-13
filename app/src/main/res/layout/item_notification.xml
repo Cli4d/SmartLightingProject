@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="16dp"
+    android:layout_marginBottom="8dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/md_theme_outlineVariant"
+    app:cardBackgroundColor="@color/md_theme_surfaceContainerLow">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="16dp">
+
+        <!-- Notification Type Icon with colored background -->
+        <FrameLayout
+            android:id="@+id/frameNotificationIcon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/circle_background"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <ImageView
+                android:id="@+id/iconNotification"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:src="@drawable/ic_notifications"
+                app:tint="@color/md_theme_onPrimary"
+                tools:src="@drawable/ic_lightbulb" />
+        </FrameLayout>
+
+        <!-- Notification Message -->
+        <TextView
+            android:id="@+id/textNotificationMessage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
+            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+            android:textColor="@color/md_theme_onSurface"
+            android:maxLines="2"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toStartOf="@+id/buttonDismiss"
+            app:layout_constraintStart_toEndOf="@+id/frameNotificationIcon"
+            app:layout_constraintTop_toTopOf="@+id/frameNotificationIcon"
+            tools:text="Bedtime reached. Lights automatically dimmed to 20% for better sleep." />
+
+        <!-- Notification Timestamp -->
+        <TextView
+            android:id="@+id/textNotificationTime"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="2dp"
+            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+            android:textColor="@color/md_theme_onSurfaceVariant"
+            app:layout_constraintEnd_toStartOf="@+id/buttonDismiss"
+            app:layout_constraintStart_toEndOf="@+id/frameNotificationIcon"
+            app:layout_constraintTop_toBottomOf="@+id/textNotificationMessage"
+            tools:text="2 minutes ago • Auto Mode" />
+
+        <!-- Priority Indicator (optional - can be made visible for important notifications) -->
+        <View
+            android:id="@+id/priorityIndicator"
+            android:layout_width="3dp"
+            android:layout_height="0dp"
+            android:background="@color/md_theme_primary"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:visibility="visible" />
+
+        <!-- Dismiss Button -->
+        <ImageButton
+            android:id="@+id/buttonDismiss"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Dismiss notification"
+            android:src="@drawable/ic_close"
+            app:tint="@color/md_theme_onSurfaceVariant"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Action Button (optional - for notifications that need action) -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonAction"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+            android:layout_marginTop="8dp"
+            android:text="Undo"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/textNotificationTime"
+            tools:visibility="visible" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.card.MaterialCardView>
