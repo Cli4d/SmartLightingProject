@@ -1,6 +1,8 @@
 package com.smart.smartbulb.fragments;
 
 import android.Manifest;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -43,10 +45,14 @@ import java.util.function.Consumer;
 /**
  * Voice Control Fragment with PicoVoice Eagle Speaker Identification
  * Identifies speakers and applies their personalized lighting preferences
+ * Updated with configurable device ID support
  */
 public class VoiceControlFragment extends Fragment {
     private static final String TAG = "VoiceControlFragment";
     private static final int PERMISSION_REQUEST_AUDIO = 1001;
+    private static final String PREFS_NAME = "SmartBulbPrefs";
+    private static final String PREF_DEVICE_ID = "device_id";
+    private static final String DEFAULT_DEVICE_ID = "bfc64cc8fa223bd6afxqtb";
 
     // UI Components
     private View rootView;
@@ -74,6 +80,7 @@ public class VoiceControlFragment extends Fragment {
     private Consumer<LightSettings> lightSettingsCallback;
     private volatile boolean isRecording = false;
     private volatile boolean isProcessingApiCall = false;
+    private String currentDeviceId = DEFAULT_DEVICE_ID;
 
     // Speaker adapter for RecyclerView
     private SpeakerAdapter speakerAdapter;
@@ -88,15 +95,24 @@ public class VoiceControlFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        Log.d(TAG, "VoiceControlFragment onViewCreated with Eagle integration");
+        Log.d(TAG, "VoiceControlFragment onViewCreated with configurable device ID support");
 
         // Initialize components
+        loadDeviceIdFromPreferences();
         initializeViews();
         initializeServices();
         setupUI();
 
         // Check audio permission and trigger initial UI update
         checkAudioPermission();
+    }
+
+    private void loadDeviceIdFromPreferences() {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            currentDeviceId = prefs.getString(PREF_DEVICE_ID, DEFAULT_DEVICE_ID);
+            Log.d(TAG, "VoiceControlFragment loaded device ID from preferences: " + currentDeviceId);
+        }
     }
 
     private void initializeViews() {
@@ -142,24 +158,51 @@ public class VoiceControlFragment extends Fragment {
             }
         });
 
-        // Initialize Tuya service
+        // Initialize Tuya service with configurable device ID
+        initializeTuyaService();
+
+        // Get current light settings from arguments
+        if (getArguments() != null) {
+            currentLightSettings = (LightSettings) getArguments().getSerializable("lightSettings");
+        }
+        if (currentLightSettings == null) {
+            currentLightSettings = new LightSettings();
+            Log.w(TAG, "currentLightSettings was null, initialized with default values.");
+        }
+    }
+
+    private void initializeTuyaService() {
+        if (!isAdded()) {
+            Log.w(TAG, "Cannot initialize Tuya service - fragment not attached");
+            return;
+        }
+
+        Log.d(TAG, "Initializing Tuya Cloud API service for VoiceControl with device ID: " + currentDeviceId);
+
         tuyaService = new TuyaCloudApiService();
-        // IMPORTANT: Replace with your actual Tuya Device ID
-        tuyaService.setDeviceId("bfc64cc8fa223bd6afxqtb");
+
+        // Set device ID from preferences (configurable)
+        if (currentDeviceId != null && !currentDeviceId.trim().isEmpty()) {
+            tuyaService.setDeviceId(currentDeviceId);
+        } else {
+            Log.w(TAG, "No device ID configured in VoiceControlFragment");
+            safeShowSnackbar("Device ID not configured. Voice control may not work properly.");
+            return;
+        }
 
         tuyaService.setCallback(new TuyaCloudApiService.TuyaCloudCallback() {
             @Override
             public void onDeviceConnected(String deviceName) {
-                Log.d(TAG, "Tuya connected for voice control");
+                Log.d(TAG, "Tuya connected for voice control: " + deviceName);
                 safeUpdateUI(VoiceControlFragment.this::updateControlStates);
-                safeShowSnackbar("Tuya device '" + deviceName + "' connected.");
+                safeShowSnackbar("Device '" + deviceName + "' connected for voice control.");
             }
 
             @Override
             public void onDeviceDisconnected() {
-                Log.w(TAG, "Tuya disconnected");
+                Log.w(TAG, "Tuya disconnected from voice control");
                 safeUpdateUI(VoiceControlFragment.this::updateControlStates);
-                safeShowSnackbar("Tuya device disconnected.");
+                safeShowSnackbar("Device disconnected from voice control.");
             }
 
             @Override
@@ -185,26 +228,17 @@ public class VoiceControlFragment extends Fragment {
 
             @Override
             public void onError(String error) {
-                safeShowSnackbar("Tuya error: " + error);
+                safeShowSnackbar("Voice control device error: " + error);
             }
 
             @Override
             public void onSuccess(String message) {
-                Log.d(TAG, "Tuya success: " + message);
+                Log.d(TAG, "Tuya success in voice control: " + message);
             }
         });
 
         // Connect to Tuya on startup
         tuyaService.connect();
-
-        // Get current light settings from arguments
-        if (getArguments() != null) {
-            currentLightSettings = (LightSettings) getArguments().getSerializable("lightSettings");
-        }
-        if (currentLightSettings == null) {
-            currentLightSettings = new LightSettings();
-            Log.w(TAG, "currentLightSettings was null, initialized with default values.");
-        }
     }
 
     private void setupUI() {
@@ -306,6 +340,12 @@ public class VoiceControlFragment extends Fragment {
             return;
         }
 
+        // Check if Tuya device is connected
+        if (!tuyaService.isConnected()) {
+            safeShowSnackbar("Device not connected. Cannot apply speaker preferences.");
+            return;
+        }
+
         // Check if there are any enrolled profiles
         boolean hasEnrolledProfiles = speakerService.getEnrolledSpeakers().stream()
                 .anyMatch(p -> "Enrolled".equalsIgnoreCase(p.getEnrollmentStatus()));
@@ -325,7 +365,7 @@ public class VoiceControlFragment extends Fragment {
         isRecording = true;
         isProcessingApiCall = true;
         updateRecordingUI(true, "Listening... Speak for a few seconds for identification.");
-        updateControlStates(); // ADDED: Update control states separately
+        updateControlStates();
 
         speakerService.identifySpeaker(new EagleSpeakerIdentificationService.SpeakerIdentificationCallback() {
             @Override
@@ -334,7 +374,7 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
                     currentSpeaker = profile;
                     updateCurrentSpeakerUI();
                     applySpeakerPreferences(profile);
@@ -348,7 +388,7 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
                     safeShowSnackbar("Identification failed: " + error);
                     currentSpeaker = null;
                     updateCurrentSpeakerUI();
@@ -361,7 +401,7 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
                     safeShowSnackbar("Error during identification: " + error);
                     currentSpeaker = null;
                     updateCurrentSpeakerUI();
@@ -379,12 +419,12 @@ public class VoiceControlFragment extends Fragment {
             return;
         }
         if (!tuyaService.isConnected()) {
-            safeShowSnackbar("Tuya device not connected. Cannot apply preferences.");
+            safeShowSnackbar("Device not connected. Cannot apply preferences.");
             Log.w(TAG, "Tuya not connected, skipping preference application.");
             return;
         }
 
-        Log.d(TAG, "Applying preferences for " + profile.getUserName());
+        Log.d(TAG, "Applying preferences for " + profile.getUserName() + " to device: " + currentDeviceId);
 
         // Apply brightness
         tuyaService.setBrightness(profile.getPreferredBrightness());
@@ -414,7 +454,6 @@ public class VoiceControlFragment extends Fragment {
         // Update UI to reflect current speaker and their applied preferences
         updateCurrentSpeakerUI();
     }
-
     /**
      * Displays a dialog for enrolling a new speaker.
      */
@@ -497,7 +536,7 @@ public class VoiceControlFragment extends Fragment {
         isRecording = true;
         isProcessingApiCall = true;
         updateRecordingUI(true, "🎤 Recording for " + userName + "... Speak clearly and naturally!");
-        updateControlStates(); // ADDED: Update control states separately
+        updateControlStates();
 
         speakerService.enrollSpeaker(profileId, new EagleSpeakerIdentificationService.EnrollmentCallback() {
             @Override
@@ -506,7 +545,7 @@ public class VoiceControlFragment extends Fragment {
                 safeUpdateUI(() -> {
                     Toast.makeText(requireContext(), "📢 Start speaking now! Speak for at least 15 seconds.", Toast.LENGTH_LONG).show();
                     updateRecordingUI(true, "🗣️ Keep speaking... Need clear, natural speech.");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
                 });
             }
 
@@ -516,7 +555,7 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
                     refreshSpeakerList();
                     safeShowSnackbar("✅ Enrollment complete for " + completedUserName + "! You can now be identified.");
                     Toast.makeText(requireContext(), "🎉 " + completedUserName + " successfully enrolled!", Toast.LENGTH_LONG).show();
@@ -530,16 +569,16 @@ public class VoiceControlFragment extends Fragment {
 
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
                     refreshSpeakerList();
                     if (remainingSeconds > 0) {
                         safeShowSnackbar("📈 Progress made! Need " + remainingSeconds + " more seconds for " + userName);
                         updateRecordingUI(true, "🔄 Continue speaking... " + remainingSeconds + "s remaining");
-                        updateControlStates(); // ADDED: Update control states again for recording state
+                        updateControlStates();
                     } else {
                         safeShowSnackbar("Almost done! Keep speaking clearly...");
                         updateRecordingUI(true, "🎯 Final stage - keep speaking naturally!");
-                        updateControlStates(); // ADDED: Update control states again for recording state
+                        updateControlStates();
                     }
                 });
             }
@@ -550,7 +589,7 @@ public class VoiceControlFragment extends Fragment {
                 isProcessingApiCall = false;
                 safeUpdateUI(() -> {
                     updateRecordingUI(false, "");
-                    updateControlStates(); // ADDED: Update control states
+                    updateControlStates();
 
                     // Provide helpful error messages
                     String userFriendlyError;
@@ -798,21 +837,20 @@ public class VoiceControlFragment extends Fragment {
                 .show();
     }
 
-/**
- * Helper method to validate hex color format
- */
+    /**
+     * Helper method to validate hex color format
+     */
+    private boolean isValidHexColor(String color) {
+        if (color == null || color.isEmpty()) return false;
 
-private boolean isValidHexColor(String color) {
-    if (color == null || color.isEmpty()) return false;
+        // Add # if missing
+        if (!color.startsWith("#")) {
+            color = "#" + color;
+        }
 
-    // Add # if missing
-    if (!color.startsWith("#")) {
-        color = "#" + color;
+        // Check format: #RRGGBB
+        return color.matches("^#[0-9A-Fa-f]{6}$");
     }
-
-    // Check format: #RRGGBB
-    return color.matches("^#[0-9A-Fa-f]{6}$");
-}
 
     /**
      * Saves the updated speaker preferences from the dialog with enhanced color picker support.
@@ -917,92 +955,6 @@ private boolean isValidHexColor(String color) {
             this.name = name;
         }
     }
-    /**
-     * Saves the updated speaker preferences with color picker support.
-     */
-    private void saveSpeakerPreferences(@NonNull SpeakerProfile profile, @NonNull View dialogView) {
-        try {
-            // Extract values from dialog controls
-            com.google.android.material.slider.Slider sliderBrightness = dialogView.findViewById(R.id.sliderBrightness);
-            TextInputEditText editCustomColor = dialogView.findViewById(R.id.editCustomColor);
-            TextInputEditText editSunsetTime = dialogView.findViewById(R.id.editSunsetTime);
-            TextInputEditText editBedtime = dialogView.findViewById(R.id.editBedtime);
-            com.google.android.material.materialswitch.MaterialSwitch switchAutoSchedule = dialogView.findViewById(R.id.switchAutoSchedule);
-
-            int newBrightness = profile.getPreferredBrightness();
-            String newColor = profile.getPreferredColor();
-            String newSunsetTime = profile.getPreferredSunsetTime();
-            String newBedtime = profile.getPreferredBedtime();
-            boolean newAutoSchedule = profile.isAutoScheduleEnabled();
-
-            // Extract brightness
-            if (sliderBrightness != null) {
-                newBrightness = (int) sliderBrightness.getValue();
-            }
-
-            // Extract color from custom color input
-            if (editCustomColor != null && editCustomColor.getText() != null) {
-                String colorText = editCustomColor.getText().toString().trim();
-                if (!colorText.isEmpty()) {
-                    if (!colorText.startsWith("#")) {
-                        colorText = "#" + colorText;
-                    }
-                    // Validate hex color format
-                    if (colorText.matches("^#[0-9A-Fa-f]{6}$")) {
-                        try {
-                            Color.parseColor(colorText); // Test if it's a valid color
-                            newColor = colorText.toUpperCase();
-                        } catch (Exception e) {
-                            Log.w(TAG, "Invalid color format: " + colorText);
-                        }
-                    }
-                }
-            }
-
-            // Extract sunset time
-            if (editSunsetTime != null && editSunsetTime.getText() != null) {
-                String timeText = editSunsetTime.getText().toString().trim();
-                if (!timeText.isEmpty() && timeText.matches("^\\d{1,2}:\\d{2}$")) {
-                    newSunsetTime = timeText;
-                }
-            }
-
-            // Extract bedtime
-            if (editBedtime != null && editBedtime.getText() != null) {
-                String timeText = editBedtime.getText().toString().trim();
-                if (!timeText.isEmpty() && timeText.matches("^\\d{1,2}:\\d{2}$")) {
-                    newBedtime = timeText;
-                }
-            }
-
-            // Extract auto schedule
-            if (switchAutoSchedule != null) {
-                newAutoSchedule = switchAutoSchedule.isChecked();
-            }
-
-            // Update the speaker preferences
-            speakerService.updateSpeakerPreferences(
-                    profile.getProfileId(),
-                    newBrightness,
-                    newColor,
-                    newSunsetTime,
-                    newBedtime,
-                    newAutoSchedule
-            );
-
-            refreshSpeakerList();
-            safeShowSnackbar("✅ Preferences updated for " + profile.getUserName());
-
-            // Show a summary of what was saved
-            String summary = String.format("💡 %s's preferences updated:\n🔆 Brightness: %d%%\n🎨 Color: %s\n⏰ Sunset: %s, Bedtime: %s",
-                    profile.getUserName(), newBrightness, getColorName(newColor), newSunsetTime, newBedtime);
-            Toast.makeText(requireContext(), summary, Toast.LENGTH_LONG).show();
-
-        } catch (Exception e) {
-            Log.e(TAG, "Error saving speaker preferences", e);
-            safeShowSnackbar("❌ Error saving preferences: " + e.getMessage());
-        }
-    }
 
     /**
      * Confirms and then initiates deletion of a speaker profile.
@@ -1075,9 +1027,63 @@ private boolean isValidHexColor(String color) {
                 .setNegativeButton("Cancel", null)
                 .show();
     }
+
     private void processVoiceCommand() {
         safeShowSnackbar("Voice commands are under development!");
         // Future: Implement voice commands like "dim lights", "turn on sunset mode", etc.
+    }
+
+    // --- Device ID Management Methods ---
+
+    /**
+     * Update device ID when changed from other fragments
+     */
+    public void updateDeviceId(String newDeviceId) {
+        if (newDeviceId != null && !newDeviceId.equals(currentDeviceId)) {
+            Log.d(TAG, "Updating device ID in VoiceControl: " + newDeviceId);
+            currentDeviceId = newDeviceId;
+
+            // Disconnect current service and reinitialize with new device ID
+            if (tuyaService != null) {
+                tuyaService.disconnect();
+            }
+
+            // Reinitialize with new device ID
+            initializeTuyaService();
+
+            safeUpdateUI(() -> updateControlStates());
+        }
+    }
+
+    /**
+     * Get current device ID
+     */
+    public String getCurrentDeviceId() {
+        return currentDeviceId;
+    }
+
+    /**
+     * Reload device ID and reconnect (useful when device ID changes)
+     */
+    public void reloadDeviceIdAndReconnect() {
+        Log.d(TAG, "Reloading device ID and reconnecting...");
+
+        // Reload device ID from preferences
+        loadDeviceIdFromPreferences();
+
+        // Update Tuya service with new device ID if changed
+        if (tuyaService != null) {
+            String currentServiceDeviceId = tuyaService.getDeviceId();
+            if (!currentDeviceId.equals(currentServiceDeviceId)) {
+                Log.d(TAG, "Device ID changed, updating service: " + currentServiceDeviceId + " -> " + currentDeviceId);
+                updateDeviceId(currentDeviceId);
+            } else {
+                // Just reconnect with existing device ID
+                if (!tuyaService.isConnected()) {
+                    tuyaService.connect();
+                }
+            }
+        }
     }
 
     // --- UI Update Methods ---
@@ -1090,19 +1096,14 @@ private boolean isValidHexColor(String color) {
     /**
      * Enables/disables UI controls based on recording/processing state and Tuya connection.
      */
-    // Replace these two methods in your VoiceControlFragment.java
-
-    /**
-     * Enables/disables UI controls based on recording/processing state and Tuya connection.
-     */
     private void updateControlStates() {
         boolean isAudioPermissionGranted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
         boolean isTuyaConnected = tuyaService != null && tuyaService.isConnected();
         boolean isEagleReady = speakerService != null && speakerService.isInitialized() && !speakerService.isInitializing();
         boolean canControl = isTuyaConnected && isAudioPermissionGranted && isEagleReady;
 
-        Log.d(TAG, String.format("Control states - Audio: %s, Tuya: %s, Eagle: %s, CanControl: %s",
-                isAudioPermissionGranted, isTuyaConnected, isEagleReady, canControl));
+        Log.d(TAG, String.format("VoiceControl states - Audio: %s, Tuya: %s (Device: %s), Eagle: %s, CanControl: %s",
+                isAudioPermissionGranted, isTuyaConnected, currentDeviceId.substring(0, 8) + "...", isEagleReady, canControl));
 
         // Disable interaction if recording or an API call is in progress
         buttonIdentify.setEnabled(canControl && !isRecording && !isProcessingApiCall);
@@ -1112,8 +1113,6 @@ private boolean isValidHexColor(String color) {
         // Show initialization status ONLY if Eagle is initializing
         if (speakerService != null && speakerService.isInitializing()) {
             String status = speakerService.getInitializationStatus();
-            // REMOVED: updateRecordingUI call to break circular reference
-            // Instead, directly update the recording UI elements
             if (progressRecording != null && recordingStatusContainer != null && textRecordingStatus != null) {
                 progressRecording.setVisibility(View.VISIBLE);
                 textRecordingStatus.setText(status);
@@ -1144,13 +1143,6 @@ private boolean isValidHexColor(String color) {
 
     /**
      * Shows/hides the recording status UI.
-     * FIXED: Removed circular call to updateControlStates()
-     */
-
-
-
-    /**
-     * Shows/hides the recording status UI.
      */
     private void updateRecordingUI(boolean recording, String statusText) {
         if (recordingStatusContainer != null && progressRecording != null && textRecordingStatus != null) {
@@ -1158,9 +1150,6 @@ private boolean isValidHexColor(String color) {
             textRecordingStatus.setText(statusText);
             recordingStatusContainer.setVisibility(recording ? View.VISIBLE : View.GONE);
         }
-
-        // REMOVED: updateControlStates() call to break circular reference
-        // The control states should be updated separately when needed
 
         Log.d(TAG, "Recording UI updated - Recording: " + recording + ", Status: " + statusText);
     }
@@ -1170,19 +1159,6 @@ private boolean isValidHexColor(String color) {
      */
     private void updateCurrentSpeakerUI() {
         if (currentSpeaker != null) {
-            cardCurrentSpeaker.setVisibility(View.VISIBLE);
-            textCurrentSpeaker.setText("Current Speaker: " + currentSpeaker.getUserName());
-
-            String preferences = String.format(
-                    "Brightness: %d%%\nColor: %s\nSunset: %s\nBedtime: %s\nAuto Schedule: %s",
-                    currentSpeaker.getPreferredBrightness(),
-                    getColorName(currentSpeaker.getPreferredColor()),
-                    currentSpeaker.getPreferredSunsetTime(),
-                    currentSpeaker.getPreferredBedtime(),
-                    currentSpeaker.isAutoScheduleEnabled() ? "On" : "Off"
-            );
-            textSpeakerPreferences.setText(preferences);
-        } else {
             cardCurrentSpeaker.setVisibility(View.GONE);
         }
     }
@@ -1229,7 +1205,6 @@ private boolean isValidHexColor(String color) {
         }
     }
 
-
     /**
      * Helper to get a human-readable name for a hex color.
      */
@@ -1270,15 +1245,60 @@ private boolean isValidHexColor(String color) {
         this.lightSettingsCallback = callback;
     }
 
+    // --- Debug and Status Methods ---
+
+    /**
+     * Get fragment status for debugging
+     */
+    public String getFragmentStatus() {
+        StringBuilder status = new StringBuilder();
+        status.append("VoiceControlFragment Status:\n");
+        status.append("- Added: ").append(isAdded()).append("\n");
+        status.append("- Activity null: ").append(getActivity() == null).append("\n");
+        status.append("- Current device ID: ").append(currentDeviceId).append("\n");
+        status.append("- Device connected: ").append(tuyaService != null && tuyaService.isConnected()).append("\n");
+        status.append("- Eagle initialized: ").append(speakerService != null && speakerService.isInitialized()).append("\n");
+        status.append("- Recording: ").append(isRecording).append("\n");
+        status.append("- Processing: ").append(isProcessingApiCall).append("\n");
+        status.append("- Current speaker: ").append(currentSpeaker != null ? currentSpeaker.getUserName() : "None").append("\n");
+
+        if (speakerService != null) {
+            List<SpeakerProfile> speakers = speakerService.getEnrolledSpeakers();
+            status.append("- Enrolled speakers: ").append(speakers.size()).append("\n");
+        }
+
+        return status.toString();
+    }
+
+    /**
+     * Check if voice control is ready for use
+     */
+    public boolean isVoiceControlReady() {
+        boolean isAudioPermissionGranted = ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        boolean isTuyaConnected = tuyaService != null && tuyaService.isConnected();
+        boolean isEagleReady = speakerService != null && speakerService.isInitialized();
+
+        return isAudioPermissionGranted && isTuyaConnected && isEagleReady && !isRecording && !isProcessingApiCall;
+    }
+
     // --- Lifecycle Methods ---
     @Override
     public void onResume() {
         super.onResume();
         Log.d(TAG, "VoiceControlFragment onResume");
 
-        // Reconnect Tuya if needed
-        if (tuyaService != null && !tuyaService.isConnected()) {
-            tuyaService.connect();
+        // Reload device ID in case it was changed in another fragment
+        String previousDeviceId = currentDeviceId;
+        loadDeviceIdFromPreferences();
+
+        if (!currentDeviceId.equals(previousDeviceId)) {
+            Log.d(TAG, "Device ID changed while fragment was paused, updating: " + previousDeviceId + " -> " + currentDeviceId);
+            updateDeviceId(currentDeviceId);
+        } else {
+            // Reconnect Tuya if needed with existing device ID
+            if (tuyaService != null && !tuyaService.isConnected()) {
+                tuyaService.connect();
+            }
         }
 
         // Always refresh UI state
@@ -1298,7 +1318,7 @@ private boolean isValidHexColor(String color) {
             isRecording = false;
             isProcessingApiCall = false;
             updateRecordingUI(false, "");
-            updateControlStates(); // ADDED: Update control states after stopping
+            updateControlStates();
         }
     }
 
@@ -1315,6 +1335,11 @@ private boolean isValidHexColor(String color) {
         if (speakerService != null) {
             speakerService.cleanup();
         }
+
+        // Clear references
+        currentSpeaker = null;
+        lightSettingsCallback = null;
+        speakerAdapter = null;
     }
 
     /**
@@ -1448,6 +1473,6 @@ private boolean isValidHexColor(String color) {
                 buttonDelete.setEnabled(interactionEnabled);
                 buttonEnrollMore.setEnabled(interactionEnabled && !"Enrolled".equalsIgnoreCase(status));
             }
-        }
-    }
+        } // End of SpeakerViewHolder class
+    } // End of SpeakerAdapter class
 }

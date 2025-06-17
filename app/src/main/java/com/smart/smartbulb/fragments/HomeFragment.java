@@ -1,8 +1,12 @@
-// HomeFragment.java (Updated with comprehensive safety checks)
+// HomeFragment.java (Updated with Persistent State Tracking)
 package com.smart.smartbulb.fragments;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -27,16 +31,34 @@ import com.smart.smartbulb.utils.BrightnessDisplayHelper;
 import com.smart.smartbulb.utils.LightBrightnessManager;
 import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.switchmaterial.SwitchMaterial;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.function.Consumer;
 
-// HomeFragment.java (Complete Updated Version)
-
 public class HomeFragment extends Fragment {
     private static final String TAG = "HomeFragment";
+    private static final String PREFS_NAME = "SmartBulbPrefs";
+
+    // Device configuration preferences
+    private static final String PREF_DEVICE_ID = "device_id";
+    private static final String DEFAULT_DEVICE_ID = "bfc64cc8fa223bd6afxqtb";
+
+    // Bulb state persistence preferences
+    private static final String PREF_BULB_STATE = "bulb_on_state";
+    private static final String PREF_BRIGHTNESS = "bulb_brightness";
+    private static final String PREF_COLOR = "bulb_color";
+    private static final String PREF_AUTO_MODE = "auto_mode_enabled";
+    private static final String PREF_LAST_UPDATE_TIME = "last_state_update";
+
+    // Default values
+    private static final boolean DEFAULT_BULB_STATE = false;
+    private static final int DEFAULT_BRIGHTNESS = 50;
+    private static final String DEFAULT_COLOR = "#FFFFFF";
+    private static final boolean DEFAULT_AUTO_MODE = false;
 
     // Fragment state
     private View rootView;
@@ -61,11 +83,17 @@ public class HomeFragment extends Fragment {
     private Button buttonBrighten;
     private Button buttonCancelDimming;
     private Button buttonOptimize;
+    private Button buttonConnectDevice;
     private FrameLayout imageBulb;
     private ProgressBar progressAmbientLight;
     private MaterialCardView cardDimming;
     private MaterialCardView cardBrightnessSummary;
     private MaterialCardView cardTuyaStatus;
+    private MaterialCardView cardDeviceConfig;
+
+    // Device configuration UI
+    private TextInputLayout textInputLayoutDeviceId;
+    private TextInputEditText editTextDeviceId;
 
     // State tracking
     private AmbientLightApiService.AmbientLightData currentAmbientData;
@@ -73,39 +101,207 @@ public class HomeFragment extends Fragment {
     private volatile boolean isTuyaConnected = false;
     private volatile boolean isAutoModeEnabled = false;
     private volatile boolean isFragmentActive = false;
+    private volatile boolean isInitializingFromSavedState = false;
+    private String currentDeviceId = DEFAULT_DEVICE_ID;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         rootView = inflater.inflate(R.layout.fragment_home, container, false);
-        Log.d(TAG, "HomeFragment view created with Tuya Cloud API integration");
+        Log.d(TAG, "HomeFragment view created with persistent state tracking");
         return rootView;
     }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        Log.d(TAG, "Initializing HomeFragment with Tuya Cloud API and ambient light integration");
+        Log.d(TAG, "Initializing HomeFragment with persistent state management");
 
         isFragmentActive = true;
 
-        // Initialize components
-        initializeLightSettings();
+        // Initialize components in order
+        loadAllStateFromPreferences();  // Load saved state first
+        initializeLightSettings();      // Apply saved state to light settings
         initializeViews();
         setupUIEventHandlers();
         initializeTuyaCloudService();
         initializeAmbientDataFetcher();
         startTimeUpdater();
 
-        // Initial UI update
-        safeUpdateUI(() -> updateAllUI());
+        // Apply loaded state to UI
+        safeUpdateUI(() -> {
+            updateAllUI();
+            syncUIWithSavedState();
+        });
+
+        // Start ambient fetching if bulb was on when we left
+        if (lightSettings.isBulbOn()) {
+            Log.d(TAG, "Restoring ambient data fetching - bulb was on");
+            startAmbientDataFetching();
+        }
     }
+
+    // ================================
+    // PERSISTENT STATE MANAGEMENT
+    // ================================
+
+    private void loadAllStateFromPreferences() {
+        if (getContext() == null) {
+            Log.w(TAG, "Context not available for loading preferences");
+            return;
+        }
+
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+
+        // Load device configuration
+        currentDeviceId = prefs.getString(PREF_DEVICE_ID, DEFAULT_DEVICE_ID);
+
+        // Load bulb state
+        boolean savedBulbState = prefs.getBoolean(PREF_BULB_STATE, DEFAULT_BULB_STATE);
+        int savedBrightness = prefs.getInt(PREF_BRIGHTNESS, DEFAULT_BRIGHTNESS);
+        String savedColor = prefs.getString(PREF_COLOR, DEFAULT_COLOR);
+        isAutoModeEnabled = prefs.getBoolean(PREF_AUTO_MODE, DEFAULT_AUTO_MODE);
+
+        long lastUpdateTime = prefs.getLong(PREF_LAST_UPDATE_TIME, 0);
+        long timeSinceLastUpdate = System.currentTimeMillis() - lastUpdateTime;
+
+        Log.d(TAG, String.format("Loaded saved state - Bulb: %s, Brightness: %d%%, Color: %s, Auto: %s, Last update: %d mins ago",
+                savedBulbState ? "ON" : "OFF",
+                savedBrightness,
+                savedColor,
+                isAutoModeEnabled ? "ON" : "OFF",
+                timeSinceLastUpdate / (1000 * 60)));
+
+        // Store loaded values for initialization
+        isInitializingFromSavedState = true;
+    }
+
+    private void saveAllStateToPreferences() {
+        if (getContext() == null || lightSettings == null) {
+            Log.w(TAG, "Cannot save state - context or settings not available");
+            return;
+        }
+
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = prefs.edit();
+
+        // Save device configuration
+        editor.putString(PREF_DEVICE_ID, currentDeviceId);
+
+        // Save bulb state
+        editor.putBoolean(PREF_BULB_STATE, lightSettings.isBulbOn());
+        editor.putInt(PREF_BRIGHTNESS, lightSettings.getBrightness());
+        editor.putString(PREF_COLOR, lightSettings.getColor());
+        editor.putBoolean(PREF_AUTO_MODE, isAutoModeEnabled);
+        editor.putLong(PREF_LAST_UPDATE_TIME, System.currentTimeMillis());
+
+        editor.apply();
+
+        Log.d(TAG, String.format("Saved state - Bulb: %s, Brightness: %d%%, Color: %s, Auto: %s",
+                lightSettings.isBulbOn() ? "ON" : "OFF",
+                lightSettings.getBrightness(),
+                lightSettings.getColor(),
+                isAutoModeEnabled ? "ON" : "OFF"));
+    }
+
+    private void saveBulbStateToPreferences(boolean isOn) {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putBoolean(PREF_BULB_STATE, isOn)
+                    .putLong(PREF_LAST_UPDATE_TIME, System.currentTimeMillis())
+                    .apply();
+            Log.d(TAG, "Saved bulb state: " + (isOn ? "ON" : "OFF"));
+        }
+    }
+
+    private void saveBrightnessToPreferences(int brightness) {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putInt(PREF_BRIGHTNESS, brightness)
+                    .putLong(PREF_LAST_UPDATE_TIME, System.currentTimeMillis())
+                    .apply();
+            Log.d(TAG, "Saved brightness: " + brightness + "%");
+        }
+    }
+
+    private void saveAutoModeToPreferences(boolean enabled) {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putBoolean(PREF_AUTO_MODE, enabled)
+                    .putLong(PREF_LAST_UPDATE_TIME, System.currentTimeMillis())
+                    .apply();
+            Log.d(TAG, "Saved auto mode: " + (enabled ? "ON" : "OFF"));
+        }
+    }
+
+    private void saveColorToPreferences(String color) {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putString(PREF_COLOR, color)
+                    .putLong(PREF_LAST_UPDATE_TIME, System.currentTimeMillis())
+                    .apply();
+            Log.d(TAG, "Saved color: " + color);
+        }
+    }
+
+    private void syncUIWithSavedState() {
+        if (!isAdded() || !isInitializingFromSavedState) return;
+
+        Log.d(TAG, "Syncing UI with saved state");
+
+        // Apply saved state to UI components without triggering listeners
+        if (switchBulb != null) {
+            switchBulb.setOnCheckedChangeListener(null);
+            switchBulb.setChecked(lightSettings.isBulbOn());
+            setupBulbSwitchListener(); // Re-attach listener
+        }
+
+        if (switchAutoMode != null) {
+            switchAutoMode.setOnCheckedChangeListener(null);
+            switchAutoMode.setChecked(isAutoModeEnabled);
+            setupAutoModeSwitchListener(); // Re-attach listener
+        }
+
+        if (sliderBrightness != null) {
+            sliderBrightness.setOnSeekBarChangeListener(null);
+            sliderBrightness.setProgress(lightSettings.getBrightness());
+            setupBrightnessSliderListener(); // Re-attach listener
+        }
+
+        isInitializingFromSavedState = false;
+        Log.d(TAG, "UI sync with saved state completed");
+    }
+
+    // ================================
+    // INITIALIZATION METHODS
+    // ================================
 
     private void initializeLightSettings() {
         if (getArguments() != null) {
             lightSettings = (LightSettings) getArguments().getSerializable("lightSettings");
         }
+
         if (lightSettings == null) {
             lightSettings = new LightSettings();
+        }
+
+        // Apply saved state to light settings if we're initializing from saved state
+        if (isInitializingFromSavedState && getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+
+            boolean savedBulbState = prefs.getBoolean(PREF_BULB_STATE, DEFAULT_BULB_STATE);
+            int savedBrightness = prefs.getInt(PREF_BRIGHTNESS, DEFAULT_BRIGHTNESS);
+            String savedColor = prefs.getString(PREF_COLOR, DEFAULT_COLOR);
+
+            lightSettings.setBulbOn(savedBulbState);
+            lightSettings.setBrightness(savedBrightness);
+            lightSettings.setColor(savedColor);
+
+            Log.d(TAG, "Applied saved state to light settings - Bulb: " + savedBulbState +
+                    ", Brightness: " + savedBrightness + "%, Color: " + savedColor);
         }
     }
 
@@ -130,6 +326,7 @@ public class HomeFragment extends Fragment {
         buttonBrighten = rootView.findViewById(R.id.buttonBrighten);
         buttonCancelDimming = rootView.findViewById(R.id.buttonCancelDimming);
         buttonOptimize = rootView.findViewById(R.id.buttonOptimize);
+        buttonConnectDevice = rootView.findViewById(R.id.buttonConnectDevice);
 
         imageBulb = rootView.findViewById(R.id.imageBulb);
         progressAmbientLight = rootView.findViewById(R.id.progressAmbientLight);
@@ -137,6 +334,16 @@ public class HomeFragment extends Fragment {
         cardDimming = rootView.findViewById(R.id.cardDimming);
         cardBrightnessSummary = rootView.findViewById(R.id.cardBrightnessSummary);
         cardTuyaStatus = rootView.findViewById(R.id.cardTuyaStatus);
+        cardDeviceConfig = rootView.findViewById(R.id.cardDeviceConfig);
+
+        // Device configuration components
+        textInputLayoutDeviceId = rootView.findViewById(R.id.textInputLayoutDeviceId);
+        editTextDeviceId = rootView.findViewById(R.id.editTextDeviceId);
+
+        // Set initial device ID in the input field
+        if (editTextDeviceId != null) {
+            editTextDeviceId.setText(currentDeviceId);
+        }
     }
 
     private void setupUIEventHandlers() {
@@ -145,17 +352,40 @@ public class HomeFragment extends Fragment {
             return;
         }
 
-        // Bulb on/off switch - controls Tuya device via Cloud API
+        // Device ID input handling
+        setupDeviceIdInputHandlers();
+
+        // Setup listeners with state persistence
+        setupBulbSwitchListener();
+        setupAutoModeSwitchListener();
+        setupBrightnessSliderListener();
+
+        // Control buttons
+        setupControlButtons();
+    }
+
+    // ================================
+    // UI EVENT LISTENER SETUP
+    // ================================
+
+    private void setupBulbSwitchListener() {
         if (switchBulb != null) {
             switchBulb.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                Log.d(TAG, "Bulb switch toggled: " + isChecked);
+                // Skip if this change is from restoring saved state
+                if (isInitializingFromSavedState) return;
 
+                Log.d(TAG, "User toggled bulb switch: " + isChecked);
+
+                // Update Tuya device via Cloud API
                 if (isTuyaConnected && tuyaCloudService != null) {
                     tuyaCloudService.setLightState(isChecked);
                 }
 
+                // Update settings and save state
                 lightSettings.setBulbOn(isChecked);
+                saveBulbStateToPreferences(isChecked);
 
+                // Manage ambient data fetching
                 if (isChecked) {
                     startAmbientDataFetching();
                 } else {
@@ -165,13 +395,19 @@ public class HomeFragment extends Fragment {
 
                 notifySettingsChanged();
                 safeUpdateUI(() -> updateAllUI());
+
+                safeShowSnackbar("Bulb " + (isChecked ? "turned ON" : "turned OFF"));
             });
         }
+    }
 
-        // Auto mode switch - enables automatic brightness based on ambient light
+    private void setupAutoModeSwitchListener() {
         if (switchAutoMode != null) {
             switchAutoMode.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                Log.d(TAG, "Auto mode toggled: " + isChecked);
+                // Skip if this change is from restoring saved state
+                if (isInitializingFromSavedState) return;
+
+                Log.d(TAG, "User toggled auto mode: " + isChecked);
                 setAutoModeEnabled(isChecked);
 
                 if (isChecked && !isApiDataAvailable) {
@@ -180,21 +416,25 @@ public class HomeFragment extends Fragment {
                 }
 
                 safeUpdateUI(() -> updateAllUI());
+                safeShowSnackbar("Auto mode " + (isChecked ? "enabled" : "disabled"));
             });
         }
+    }
 
-        // Brightness slider - directly controls Tuya device via Cloud API
+    private void setupBrightnessSliderListener() {
         if (sliderBrightness != null) {
             sliderBrightness.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                    if (fromUser && isAdded()) {
+                    if (fromUser && isAdded() && !isInitializingFromSavedState) {
                         updateBrightnessDisplay(progress);
                     }
                 }
 
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {
+                    if (isInitializingFromSavedState) return;
+
                     Log.d(TAG, "User started adjusting brightness - disabling auto mode");
                     setAutoModeEnabled(false);
                     if (switchAutoMode != null) {
@@ -204,25 +444,117 @@ public class HomeFragment extends Fragment {
 
                 @Override
                 public void onStopTrackingTouch(SeekBar seekBar) {
-                    if (!isAdded()) return;
+                    if (!isAdded() || isInitializingFromSavedState) return;
 
                     int newBrightness = seekBar.getProgress();
-                    Log.d(TAG, "Setting Tuya brightness to: " + newBrightness + "%");
+                    Log.d(TAG, "User set brightness to: " + newBrightness + "%");
 
                     // Update Tuya device via Cloud API
                     if (isTuyaConnected && tuyaCloudService != null) {
                         tuyaCloudService.setBrightness(newBrightness);
                     }
 
+                    // Update settings and save state
                     lightSettings.setBrightness(newBrightness);
+                    saveBrightnessToPreferences(newBrightness);
+
                     notifySettingsChanged();
                     safeUpdateUI(() -> updateAllUI());
+
+                    safeShowSnackbar("Brightness set to " + newBrightness + "%");
+                }
+            });
+        }
+    }
+
+    private void setupDeviceIdInputHandlers() {
+        // Connect button click handler
+        if (buttonConnectDevice != null) {
+            buttonConnectDevice.setOnClickListener(v -> {
+                String newDeviceId = getDeviceIdFromInput();
+                if (isValidDeviceId(newDeviceId)) {
+                    connectToNewDevice(newDeviceId);
+                } else {
+                    safeShowSnackbar("Please enter a valid device ID");
+                    if (textInputLayoutDeviceId != null) {
+                        textInputLayoutDeviceId.setError("Invalid device ID format");
+                    }
                 }
             });
         }
 
-        // Control buttons
-        setupControlButtons();
+        // Real-time input validation
+        if (editTextDeviceId != null) {
+            editTextDeviceId.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    // Clear error when user types
+                    if (textInputLayoutDeviceId != null) {
+                        textInputLayoutDeviceId.setError(null);
+                    }
+
+                    // Update connect button state
+                    updateConnectButtonState();
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {}
+            });
+        }
+    }
+
+    private String getDeviceIdFromInput() {
+        if (editTextDeviceId != null && editTextDeviceId.getText() != null) {
+            return editTextDeviceId.getText().toString().trim();
+        }
+        return "";
+    }
+
+    private boolean isValidDeviceId(String deviceId) {
+        // Basic validation - Tuya device IDs are typically 20-22 characters alphanumeric
+        return deviceId != null &&
+                deviceId.length() >= 20 &&
+                deviceId.length() <= 25 &&
+                deviceId.matches("[a-zA-Z0-9]+");
+    }
+
+    private void updateConnectButtonState() {
+        if (buttonConnectDevice != null) {
+            String deviceId = getDeviceIdFromInput();
+            boolean isValid = isValidDeviceId(deviceId);
+            boolean isDifferent = !deviceId.equals(currentDeviceId);
+
+            buttonConnectDevice.setEnabled(isValid && isDifferent);
+            buttonConnectDevice.setText(isDifferent ? "Connect" : "Connected");
+        }
+    }
+
+    private void connectToNewDevice(String newDeviceId) {
+        Log.d(TAG, "Connecting to new device: " + newDeviceId);
+
+        // Disconnect current device
+        if (tuyaCloudService != null) {
+            tuyaCloudService.disconnect();
+            isTuyaConnected = false;
+        }
+
+        // Update device ID and save
+        currentDeviceId = newDeviceId;
+        saveAllStateToPreferences(); // Save all state including new device ID
+
+        // Show connecting status
+        safeUpdateUI(() -> {
+            updateTuyaStatus("Connecting to " + newDeviceId.substring(0, 8) + "...");
+            updateConnectButtonState();
+        });
+
+        // Initialize new connection
+        initializeTuyaCloudService();
+
+        safeShowSnackbar("Connecting to device: " + newDeviceId.substring(0, 8) + "...");
     }
 
     private void setupControlButtons() {
@@ -268,16 +600,20 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    // ================================
+    // TUYA CLOUD SERVICE
+    // ================================
+
     private void initializeTuyaCloudService() {
         if (!isAdded()) {
             Log.w(TAG, "Cannot initialize Tuya service - fragment not attached");
             return;
         }
 
-        Log.d(TAG, "Initializing Tuya Cloud API service");
+        Log.d(TAG, "Initializing Cloud API service with device ID: " + currentDeviceId);
 
         tuyaCloudService = new TuyaCloudApiService();
-        tuyaCloudService.setDeviceId("bfc64cc8fa223bd6afxqtb"); // TODO: Update with actual device ID
+        tuyaCloudService.setDeviceId(currentDeviceId);
 
         tuyaCloudService.setCallback(new TuyaCloudApiService.TuyaCloudCallback() {
             @Override
@@ -287,38 +623,43 @@ public class HomeFragment extends Fragment {
                     return;
                 }
 
-                Log.d(TAG, "Tuya Cloud device connected: " + deviceName);
+                Log.d(TAG, "Cloud device connected: " + deviceName);
                 isTuyaConnected = true;
-                syncFromTuyaCloud();
+
+                // Sync state between cloud and local settings
+                syncWithTuyaCloud();
 
                 safeUpdateUI(() -> {
                     updateTuyaStatus("Connected: " + deviceName);
+                    updateConnectButtonState();
                     updateAllUI();
                 });
-                safeShowSnackbar("Tuya Cloud connected: " + deviceName);
+                safeShowSnackbar("Connected to: " + deviceName);
             }
 
             @Override
             public void onDeviceDisconnected() {
                 if (!isFragmentActive) return;
 
-                Log.w(TAG, "Tuya Cloud device disconnected");
+                Log.w(TAG, "Cloud device disconnected");
                 isTuyaConnected = false;
                 setAutoModeEnabled(false);
 
                 safeUpdateUI(() -> {
                     updateTuyaStatus("Disconnected");
+                    updateConnectButtonState();
                     updateAllUI();
                 });
-                safeShowSnackbar("Tuya Cloud disconnected");
+                safeShowSnackbar("Device disconnected");
             }
 
             @Override
             public void onBrightnessChanged(int brightness) {
                 if (!isFragmentActive || !isAdded()) return;
 
-                Log.d(TAG, "Tuya Cloud brightness changed: " + brightness + "%");
+                Log.d(TAG, "Cloud brightness changed: " + brightness + "%");
                 lightSettings.setBrightness(brightness);
+                saveBrightnessToPreferences(brightness);
 
                 safeUpdateUI(() -> {
                     if (sliderBrightness != null) {
@@ -333,8 +674,9 @@ public class HomeFragment extends Fragment {
             public void onLightStateChanged(boolean isOn) {
                 if (!isFragmentActive || !isAdded()) return;
 
-                Log.d(TAG, "Tuya Cloud light state changed: " + (isOn ? "ON" : "OFF"));
+                Log.d(TAG, "Cloud light state changed: " + (isOn ? "ON" : "OFF"));
                 lightSettings.setBulbOn(isOn);
+                saveBulbStateToPreferences(isOn);
 
                 safeUpdateUI(() -> {
                     if (switchBulb != null) {
@@ -356,8 +698,9 @@ public class HomeFragment extends Fragment {
             public void onColorChanged(String hexColor) {
                 if (!isFragmentActive || !isAdded()) return;
 
-                Log.d(TAG, "Tuya Cloud color changed: " + hexColor);
+                Log.d(TAG, "Cloud color changed: " + hexColor);
                 lightSettings.setColor(hexColor);
+                saveColorToPreferences(hexColor);
 
                 safeUpdateUI(() -> updateBulbVisualization());
             }
@@ -366,21 +709,88 @@ public class HomeFragment extends Fragment {
             public void onError(String error) {
                 if (!isFragmentActive) return;
 
-                Log.e(TAG, "Tuya Cloud error: " + error);
-                safeUpdateUI(() -> updateTuyaStatus("Error: " + error));
-                safeShowSnackbar("Tuya Cloud error: " + error);
+                Log.e(TAG, "Cloud error: " + error);
+                safeUpdateUI(() -> {
+                    updateTuyaStatus("Error: " + error);
+                    updateConnectButtonState();
+                });
+                safeShowSnackbar("Connection error: " + error);
             }
 
             @Override
             public void onSuccess(String message) {
-                Log.d(TAG, "Tuya Cloud success: " + message);
-                // Optional: Show success feedback
+                Log.d(TAG, "Cloud success: " + message);
             }
         });
 
         // Connect to Tuya Cloud
         tuyaCloudService.connect();
     }
+
+    private void syncWithTuyaCloud() {
+        if (tuyaCloudService != null && isAdded()) {
+            // When connecting to Tuya Cloud, decide whether to push local state or pull cloud state
+            // Priority: Use local saved state if it's newer, otherwise sync from cloud
+
+            if (getContext() != null) {
+                SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                long lastLocalUpdate = prefs.getLong(PREF_LAST_UPDATE_TIME, 0);
+                long timeSinceUpdate = System.currentTimeMillis() - lastLocalUpdate;
+
+                // If local state is recent (less than 5 minutes old), push to cloud
+                if (timeSinceUpdate < 5 * 60 * 1000) {
+                    Log.d(TAG, "Pushing recent local state to cloud");
+                    pushLocalStateToCloud();
+                } else {
+                    Log.d(TAG, "Pulling current state from cloud");
+                    pullStateFromCloud();
+                }
+            } else {
+                // Fallback: pull from cloud
+                pullStateFromCloud();
+            }
+        }
+    }
+
+    private void pushLocalStateToCloud() {
+        if (tuyaCloudService != null && lightSettings != null) {
+            Log.d(TAG, "Pushing local state to cloud - Bulb: " + lightSettings.isBulbOn() +
+                    ", Brightness: " + lightSettings.getBrightness() + "%");
+
+            tuyaCloudService.setLightState(lightSettings.isBulbOn());
+            if (lightSettings.isBulbOn()) {
+                tuyaCloudService.setBrightness(lightSettings.getBrightness());
+            }
+        }
+    }
+
+    private void pullStateFromCloud() {
+        if (tuyaCloudService != null) {
+            Log.d(TAG, "Pulling state from cloud");
+
+            // Sync state from Tuya Cloud API to our settings
+            boolean cloudBulbState = tuyaCloudService.isLightOn();
+            int cloudBrightness = tuyaCloudService.getCurrentBrightness();
+            String cloudColor = tuyaCloudService.getCurrentColor();
+
+            lightSettings.setBulbOn(cloudBulbState);
+            lightSettings.setBrightness(cloudBrightness);
+            lightSettings.setColor(cloudColor);
+
+            // Save the cloud state locally
+            saveAllStateToPreferences();
+
+            Log.d(TAG, "Synced from Cloud - Light: " + cloudBulbState +
+                    ", Brightness: " + cloudBrightness + "%, Color: " + cloudColor);
+
+            // Get latest device status from cloud
+            tuyaCloudService.getDeviceStatus();
+        }
+    }
+
+    // ================================
+    // AMBIENT DATA AND AUTO ADJUSTMENT
+    // ================================
 
     private void initializeAmbientDataFetcher() {
         if (!isAdded()) {
@@ -466,7 +876,7 @@ public class HomeFragment extends Fragment {
         int difference = Math.abs(currentBrightness - optimalBrightness);
 
         if (difference > 5) {
-            Log.d(TAG, String.format("Auto-adjusting Tuya Cloud: %d%% → %d%% (ambient: %d%%)",
+            Log.d(TAG, String.format("Auto-adjusting Cloud: %d%% → %d%% (ambient: %d%%)",
                     currentBrightness, optimalBrightness, ambientPercentage));
 
             // Update Tuya device via Cloud API
@@ -474,8 +884,9 @@ public class HomeFragment extends Fragment {
                 tuyaCloudService.setBrightness(optimalBrightness);
             }
 
-            // Update local settings
+            // Update local settings and save
             lightSettings.setBrightness(optimalBrightness);
+            saveBrightnessToPreferences(optimalBrightness);
 
             // Update UI
             safeUpdateUI(() -> {
@@ -501,7 +912,7 @@ public class HomeFragment extends Fragment {
             int ambientPercentage = currentAmbientData.getPercentageAsInt();
             int optimalBrightness = LightBrightnessManager.calculateOptimalBulbBrightness(ambientPercentage);
 
-            Log.d(TAG, String.format("Optimizing Tuya Cloud brightness: %d%% (ambient: %d%%)",
+            Log.d(TAG, String.format("Optimizing Cloud brightness: %d%% (ambient: %d%%)",
                     optimalBrightness, ambientPercentage));
 
             setBrightness(optimalBrightness);
@@ -512,7 +923,7 @@ public class HomeFragment extends Fragment {
             safeShowSnackbar(message);
         } else {
             if (!isTuyaConnected) {
-                safeShowSnackbar("Tuya Cloud not connected");
+                safeShowSnackbar("Device not connected - check device ID");
             } else if (!isApiDataAvailable) {
                 safeShowSnackbar("Fetching ambient data...");
                 forceAmbientDataFetch();
@@ -528,8 +939,9 @@ public class HomeFragment extends Fragment {
             tuyaCloudService.setBrightness(brightness);
         }
 
-        // Update local settings
+        // Update local settings and save
         lightSettings.setBrightness(brightness);
+        saveBrightnessToPreferences(brightness);
 
         // Update UI
         safeUpdateUI(() -> {
@@ -545,26 +957,12 @@ public class HomeFragment extends Fragment {
 
     private void setAutoModeEnabled(boolean enabled) {
         isAutoModeEnabled = enabled;
+        saveAutoModeToPreferences(enabled);
         Log.d(TAG, "Auto mode " + (enabled ? "enabled" : "disabled"));
 
         if (enabled && isApiDataAvailable && currentAmbientData != null) {
             // Immediate optimization when enabling auto mode
             autoAdjustTuyaBrightness(currentAmbientData);
-        }
-    }
-
-    private void syncFromTuyaCloud() {
-        if (tuyaCloudService != null && isAdded()) {
-            // Sync state from Tuya Cloud API to our settings
-            lightSettings.setBulbOn(tuyaCloudService.isLightOn());
-            lightSettings.setBrightness(tuyaCloudService.getCurrentBrightness());
-            lightSettings.setColor(tuyaCloudService.getCurrentColor());
-
-            Log.d(TAG, "Synced from Tuya Cloud - Light: " + lightSettings.isBulbOn() +
-                    ", Brightness: " + lightSettings.getBrightness() + "%");
-
-            // Get latest device status from cloud
-            tuyaCloudService.getDeviceStatus();
         }
     }
 
@@ -587,6 +985,10 @@ public class HomeFragment extends Fragment {
             ambientDataFetcher.fetchImmediately();
         }
     }
+
+    // ================================
+    // UI SAFE UPDATE METHODS
+    // ================================
 
     // Safe UI update method
     private void safeUpdateUI(Runnable updateTask) {
@@ -613,7 +1015,10 @@ public class HomeFragment extends Fragment {
         });
     }
 
-    // UI Update Methods
+    // ================================
+    // UI UPDATE METHODS
+    // ================================
+
     private void updateAllUI() {
         if (!isAdded() || !isFragmentActive) return;
 
@@ -625,6 +1030,7 @@ public class HomeFragment extends Fragment {
         updateBrightnessSummary();
         updateDimmingCard();
         updateTuyaStatusCard();
+        updateDeviceConfigCard();
     }
 
     private void updateCurrentTime() {
@@ -738,7 +1144,7 @@ public class HomeFragment extends Fragment {
 
     private void updateTuyaStatus(String status) {
         if (textTuyaStatus != null && isAdded()) {
-            textTuyaStatus.setText("Tuya Cloud: " + status);
+            textTuyaStatus.setText("Cloud: " + status);
         }
     }
 
@@ -749,10 +1155,20 @@ public class HomeFragment extends Fragment {
             cardTuyaStatus.setVisibility(View.VISIBLE);
 
             String status = isTuyaConnected ?
-                    "Connected - Cloud API Active" :
-                    "Disconnected - Check credentials";
+                    "Connected - Device ID: " + currentDeviceId.substring(0, 8) + "..." :
+                    "Disconnected - Check device ID";
             updateTuyaStatus(status);
         }
+    }
+
+    private void updateDeviceConfigCard() {
+        if (!isAdded()) return;
+
+        if (cardDeviceConfig != null) {
+            cardDeviceConfig.setVisibility(View.VISIBLE);
+        }
+
+        updateConnectButtonState();
     }
 
     private void notifySettingsChanged() {
@@ -761,7 +1177,10 @@ public class HomeFragment extends Fragment {
         }
     }
 
-    // Public methods
+    // ================================
+    // PUBLIC METHODS
+    // ================================
+
     public void setCallback(Consumer<LightSettings> callback) {
         this.callback = callback;
     }
@@ -770,24 +1189,86 @@ public class HomeFragment extends Fragment {
         if (!isAdded()) return;
 
         this.lightSettings = settings;
+        saveAllStateToPreferences(); // Save the new settings
         safeUpdateUI(this::updateAllUI);
     }
 
-    // Fragment lifecycle
+    // Method to programmatically set device ID (for external use)
+    public void setDeviceId(String deviceId) {
+        if (isValidDeviceId(deviceId)) {
+            if (editTextDeviceId != null) {
+                editTextDeviceId.setText(deviceId);
+            }
+            connectToNewDevice(deviceId);
+        }
+    }
+
+    // Method to get current device ID
+    public String getCurrentDeviceId() {
+        return currentDeviceId;
+    }
+
+    // Method to get current saved state info
+    public String getSavedStateInfo() {
+        if (getContext() == null) return "Context not available";
+
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        StringBuilder info = new StringBuilder();
+        info.append("Saved State Info:\n");
+        info.append("Device ID: ").append(prefs.getString(PREF_DEVICE_ID, "Not set")).append("\n");
+        info.append("Bulb State: ").append(prefs.getBoolean(PREF_BULB_STATE, false) ? "ON" : "OFF").append("\n");
+        info.append("Brightness: ").append(prefs.getInt(PREF_BRIGHTNESS, 0)).append("%\n");
+        info.append("Color: ").append(prefs.getString(PREF_COLOR, "Not set")).append("\n");
+        info.append("Auto Mode: ").append(prefs.getBoolean(PREF_AUTO_MODE, false) ? "ON" : "OFF").append("\n");
+
+        long lastUpdate = prefs.getLong(PREF_LAST_UPDATE_TIME, 0);
+        if (lastUpdate > 0) {
+            long minutesAgo = (System.currentTimeMillis() - lastUpdate) / (1000 * 60);
+            info.append("Last Update: ").append(minutesAgo).append(" minutes ago\n");
+        } else {
+            info.append("Last Update: Never\n");
+        }
+
+        return info.toString();
+    }
+
+    // Method to clear saved state (for debugging/reset)
+    public void clearSavedState() {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            prefs.edit().clear().apply();
+            Log.d(TAG, "Cleared all saved state");
+            safeShowSnackbar("Saved state cleared - restart to see changes");
+        }
+    }
+
+    // Method to force save current state
+    public void forceSaveState() {
+        saveAllStateToPreferences();
+        safeShowSnackbar("State saved");
+        Log.d(TAG, "Forced save of current state");
+    }
+
+    // ================================
+    // FRAGMENT LIFECYCLE
+    // ================================
+
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "Fragment resumed - starting services");
+        Log.d(TAG, "Fragment resumed - restoring state and starting services");
 
         isFragmentActive = true;
 
+        // Restore ambient data fetching if bulb was on
         if (lightSettings != null && lightSettings.isBulbOn()) {
+            Log.d(TAG, "Resuming ambient data fetching - bulb is on");
             startAmbientDataFetching();
         }
 
         // Reconnect to Tuya Cloud if needed
         if (tuyaCloudService != null && !tuyaCloudService.isConnected()) {
-            Log.d(TAG, "Reconnecting to Tuya Cloud...");
+            Log.d(TAG, "Reconnecting to Cloud...");
             tuyaCloudService.connect();
         }
 
@@ -797,7 +1278,10 @@ public class HomeFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
-        Log.d(TAG, "Fragment paused - pausing services");
+        Log.d(TAG, "Fragment paused - saving state and pausing services");
+
+        // Save current state before pausing
+        saveAllStateToPreferences();
 
         if (ambientDataFetcher != null) {
             ambientDataFetcher.pause();
@@ -807,7 +1291,10 @@ public class HomeFragment extends Fragment {
     @Override
     public void onStop() {
         super.onStop();
-        Log.d(TAG, "Fragment stopped - stopping background tasks");
+        Log.d(TAG, "Fragment stopped - saving state and stopping background tasks");
+
+        // Save state before stopping
+        saveAllStateToPreferences();
 
         // Stop ambient fetching when not visible
         stopAmbientDataFetching();
@@ -821,7 +1308,10 @@ public class HomeFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        Log.d(TAG, "Fragment destroyed - cleaning up");
+        Log.d(TAG, "Fragment destroyed - saving final state and cleaning up");
+
+        // Final state save before destruction
+        saveAllStateToPreferences();
 
         // Mark fragment as inactive
         isFragmentActive = false;
@@ -846,7 +1336,7 @@ public class HomeFragment extends Fragment {
             try {
                 tuyaCloudService.disconnect();
             } catch (Exception e) {
-                Log.e(TAG, "Error disconnecting Tuya service", e);
+                Log.e(TAG, "Error disconnecting service", e);
             }
             tuyaCloudService = null;
         }
@@ -870,11 +1360,15 @@ public class HomeFragment extends Fragment {
         buttonBrighten = null;
         buttonCancelDimming = null;
         buttonOptimize = null;
+        buttonConnectDevice = null;
         imageBulb = null;
         progressAmbientLight = null;
         cardDimming = null;
         cardBrightnessSummary = null;
         cardTuyaStatus = null;
+        cardDeviceConfig = null;
+        textInputLayoutDeviceId = null;
+        editTextDeviceId = null;
 
         Log.d(TAG, "HomeFragment cleanup completed");
     }
@@ -890,6 +1384,10 @@ public class HomeFragment extends Fragment {
         // Clear any remaining references
         callback = null;
     }
+
+    // ================================
+    // UTILITY AND HELPER METHODS
+    // ================================
 
     // Helper method to safely get context
     private android.content.Context getSafeContext() {
@@ -927,7 +1425,7 @@ public class HomeFragment extends Fragment {
             }
         });
 
-        safeShowSnackbar("Error: " + operation + " failed. Please restart the app.");
+        safeShowSnackbar("Error: " + operation + " failed. Check device ID and try again.");
     }
 
     // Method to check if fragment is in valid state for operations
@@ -937,55 +1435,6 @@ public class HomeFragment extends Fragment {
                 !getActivity().isFinishing() &&
                 isFragmentActive &&
                 rootView != null;
-    }
-
-    // Enhanced error-safe brightness display update
-    private void safeBrightnessDisplayUpdate(int brightness) {
-        if (!isValidState()) return;
-
-        try {
-            if (currentAmbientData != null && isApiDataAvailable) {
-                int ambientPercentage = currentAmbientData.getPercentageAsInt();
-
-                android.content.Context context = getSafeContext();
-                if (context != null && textBrightness != null) {
-                    BrightnessDisplayHelper.updateBulbBrightnessDisplay(
-                            context, textBrightness, brightness, ambientPercentage);
-                }
-            } else if (textBrightness != null) {
-                String brightnessText = getSafeString(R.string.brightness_value, brightness);
-                if (!brightnessText.isEmpty()) {
-                    textBrightness.setText(brightnessText);
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error updating brightness display", e);
-            // Fallback to simple text
-            if (textBrightness != null) {
-                textBrightness.setText(brightness + "%");
-            }
-        }
-    }
-
-    // Enhanced error-safe ambient light display update
-    private void safeAmbientLightDisplayUpdate(AmbientLightApiService.AmbientLightData data) {
-        if (!isValidState() || data == null) return;
-
-        try {
-            android.content.Context context = getSafeContext();
-            if (context != null) {
-                BrightnessDisplayHelper.updateAmbientLightDisplay(
-                        context,
-                        textAmbientLight,
-                        progressAmbientLight,
-                        data,
-                        lightSettings != null ? lightSettings.getBrightness() : 0
-                );
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Error updating ambient light display", e);
-            handleCriticalError("ambient light display update", e);
-        }
     }
 
     // Method to force refresh all UI components
@@ -1013,9 +1462,11 @@ public class HomeFragment extends Fragment {
         status.append("- Added: ").append(isAdded()).append("\n");
         status.append("- Active: ").append(isFragmentActive).append("\n");
         status.append("- Activity null: ").append(getActivity() == null).append("\n");
-        status.append("- Tuya connected: ").append(isTuyaConnected).append("\n");
+        status.append("- connected: ").append(isTuyaConnected).append("\n");
         status.append("- API data available: ").append(isApiDataAvailable).append("\n");
         status.append("- Auto mode: ").append(isAutoModeEnabled).append("\n");
+        status.append("- Current device ID: ").append(currentDeviceId).append("\n");
+        status.append("- Initializing from saved: ").append(isInitializingFromSavedState).append("\n");
 
         if (lightSettings != null) {
             status.append("- Bulb on: ").append(lightSettings.isBulbOn()).append("\n");
@@ -1030,6 +1481,13 @@ public class HomeFragment extends Fragment {
     // Emergency cleanup method - can be called from MainActivity if needed
     public void emergencyCleanup() {
         Log.w(TAG, "Emergency cleanup initiated");
+
+        // Save state before emergency cleanup
+        try {
+            saveAllStateToPreferences();
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving state during emergency cleanup", e);
+        }
 
         isFragmentActive = false;
 
@@ -1052,7 +1510,7 @@ public class HomeFragment extends Fragment {
             try {
                 tuyaCloudService.disconnect();
             } catch (Exception e) {
-                Log.e(TAG, "Error disconnecting Tuya during emergency cleanup", e);
+                Log.e(TAG, "Error disconnecting during emergency cleanup", e);
             }
             tuyaCloudService = null;
         }
@@ -1095,6 +1553,7 @@ public class HomeFragment extends Fragment {
         try {
             boolean newState = !lightSettings.isBulbOn();
             lightSettings.setBulbOn(newState);
+            saveBulbStateToPreferences(newState);
 
             if (isTuyaConnected && tuyaCloudService != null) {
                 tuyaCloudService.setLightState(newState);
@@ -1131,10 +1590,50 @@ public class HomeFragment extends Fragment {
         }
 
         StringBuilder status = new StringBuilder();
-        status.append("Tuya: ").append(isTuyaConnected ? "Connected" : "Disconnected").append(", ");
+        status.append("Cloud: ").append(isTuyaConnected ? "Connected" : "Disconnected").append(", ");
+        status.append("Device ID: ").append(currentDeviceId.substring(0, 8)).append("..., ");
         status.append("Ambient API: ").append(isApiDataAvailable ? "Available" : "Unavailable").append(", ");
         status.append("Auto Mode: ").append(isAutoModeEnabled ? "Enabled" : "Disabled");
 
         return status.toString();
+    }
+
+    // Device ID management utility methods
+    public boolean isDeviceIdConfigured() {
+        return currentDeviceId != null && !currentDeviceId.equals(DEFAULT_DEVICE_ID);
+    }
+
+    public void resetToDefaultDeviceId() {
+        if (editTextDeviceId != null) {
+            editTextDeviceId.setText(DEFAULT_DEVICE_ID);
+        }
+        connectToNewDevice(DEFAULT_DEVICE_ID);
+    }
+
+    // Method to validate and update device ID from external sources
+    public boolean updateDeviceIdIfValid(String newDeviceId) {
+        if (isValidDeviceId(newDeviceId) && !newDeviceId.equals(currentDeviceId)) {
+            setDeviceId(newDeviceId);
+            return true;
+        }
+        return false;
+    }
+
+    // Method to get device connection info for debugging
+    public String getDeviceConnectionInfo() {
+        StringBuilder info = new StringBuilder();
+        info.append("Device Connection Info:\n");
+        info.append("Current Device ID: ").append(currentDeviceId).append("\n");
+        info.append("Connection Status: ").append(isTuyaConnected ? "Connected" : "Disconnected").append("\n");
+        info.append("Service Initialized: ").append(tuyaCloudService != null).append("\n");
+
+        if (tuyaCloudService != null) {
+            info.append("Service Connected: ").append(tuyaCloudService.isConnected()).append("\n");
+            info.append("Current Brightness: ").append(tuyaCloudService.getCurrentBrightness()).append("%\n");
+            info.append("Light State: ").append(tuyaCloudService.isLightOn() ? "ON" : "OFF").append("\n");
+            info.append("Current Color: ").append(tuyaCloudService.getCurrentColor()).append("\n");
+        }
+
+        return info.toString();
     }
 }

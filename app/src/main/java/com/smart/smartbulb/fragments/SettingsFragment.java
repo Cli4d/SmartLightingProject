@@ -1,5 +1,7 @@
 package com.smart.smartbulb.fragments;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
@@ -28,9 +30,11 @@ import com.smart.smartbulb.services.TuyaCloudApiService;
 
 import java.util.function.Consumer;
 
-
 public class SettingsFragment extends Fragment {
     private static final String TAG = "SettingsFragment";
+    private static final String PREFS_NAME = "SmartBulbPrefs";
+    private static final String PREF_DEVICE_ID = "device_id";
+    private static final String DEFAULT_DEVICE_ID = "bfc64cc8fa223bd6afxqtb";
 
     private View rootView;
 
@@ -52,7 +56,7 @@ public class SettingsFragment extends Fragment {
     private EditText editUsername;
     private Button buttonSaveUsername;
 
-    // New Tuya integration
+    // Tuya integration
     private TuyaCloudApiService tuyaService;
     private MaterialCardView cardTuyaConnection;
     private TextView textTuyaConnectionStatus;
@@ -71,6 +75,7 @@ public class SettingsFragment extends Fragment {
     private Consumer<LightSettings> callback;
     private volatile boolean isTuyaConnected = false;
     private volatile boolean isFragmentActive = false;
+    private String currentDeviceId = DEFAULT_DEVICE_ID;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -81,21 +86,24 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        Log.d(TAG, "SettingsFragment initialized with Tuya integration");
+        Log.d(TAG, "SettingsFragment initialized with configurable Tuya integration");
 
         isFragmentActive = true;
 
-        // Find views
+        // Initialize components
+        loadDeviceIdFromPreferences();
         initializeViews();
-
-        // Get light settings from arguments
         initializeLightSettings();
-
-        // Initialize Tuya service
         initializeTuyaService();
-
-        // Set up UI
         setupUI();
+    }
+
+    private void loadDeviceIdFromPreferences() {
+        if (getContext() != null) {
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            currentDeviceId = prefs.getString(PREF_DEVICE_ID, DEFAULT_DEVICE_ID);
+            Log.d(TAG, "SettingsFragment loaded device ID from preferences: " + currentDeviceId);
+        }
     }
 
     private void initializeViews() {
@@ -159,10 +167,18 @@ public class SettingsFragment extends Fragment {
             return;
         }
 
-        Log.d(TAG, "Initializing Tuya Cloud API service for SettingsFragment");
+        Log.d(TAG, "Initializing Tuya Cloud API service for SettingsFragment with device ID: " + currentDeviceId);
 
         tuyaService = new TuyaCloudApiService();
-        tuyaService.setDeviceId("bfc64cc8fa223bd6afxqtb"); // TODO: Make this configurable
+
+        // Set device ID from preferences (configurable)
+        if (currentDeviceId != null && !currentDeviceId.trim().isEmpty()) {
+            tuyaService.setDeviceId(currentDeviceId);
+        } else {
+            Log.w(TAG, "No device ID configured in SettingsFragment");
+            safeUpdateUI(() -> updateTuyaConnectionStatus("Device ID not configured", false));
+            return;
+        }
 
         tuyaService.setCallback(new TuyaCloudApiService.TuyaCloudCallback() {
             @Override
@@ -173,11 +189,11 @@ public class SettingsFragment extends Fragment {
                 isTuyaConnected = true;
 
                 safeUpdateUI(() -> {
-                    updateTuyaConnectionStatus("Connected: " + deviceName, true);
+                    updateTuyaConnectionStatus("Connected: " + deviceName + " (" + currentDeviceId.substring(0, 8) + "...)", true);
                     updateTuyaControls();
                 });
 
-                safeShowSnackbar("Tuya device connected: " + deviceName);
+                safeShowSnackbar("Device connected: " + deviceName);
 
                 // Sync current state
                 tuyaService.getDeviceStatus();
@@ -191,11 +207,11 @@ public class SettingsFragment extends Fragment {
                 isTuyaConnected = false;
 
                 safeUpdateUI(() -> {
-                    updateTuyaConnectionStatus("Disconnected", false);
+                    updateTuyaConnectionStatus("Disconnected - Device: " + currentDeviceId.substring(0, 8) + "...", false);
                     updateTuyaControls();
                 });
 
-                safeShowSnackbar("Tuya device disconnected");
+                safeShowSnackbar("Device disconnected");
             }
 
             @Override
@@ -254,13 +270,13 @@ public class SettingsFragment extends Fragment {
                 if (!isFragmentActive) return;
 
                 Log.e(TAG, "Settings Tuya error: " + error);
-                safeUpdateUI(() -> updateTuyaConnectionStatus("Error: " + error, false));
-                safeShowSnackbar("Tuya error: " + error);
+                safeUpdateUI(() -> updateTuyaConnectionStatus("Error: " + error + " (Device: " + currentDeviceId.substring(0, 8) + "...)", false));
+                safeShowSnackbar("Cloud error: " + error);
             }
 
             @Override
             public void onSuccess(String message) {
-                Log.d(TAG, "Settings Tuya success: " + message);
+                Log.d(TAG, "Settings Cloud success: " + message);
             }
         });
 
@@ -326,6 +342,8 @@ public class SettingsFragment extends Fragment {
 
                 if (isTuyaConnected && tuyaService != null) {
                     tuyaService.setLightState(isChecked);
+                } else if (!isTuyaConnected) {
+                    safeShowSnackbar("Device not connected - check device ID configuration");
                 }
 
                 lightSettings.setBulbOn(isChecked);
@@ -359,6 +377,8 @@ public class SettingsFragment extends Fragment {
 
                     if (isTuyaConnected && tuyaService != null) {
                         tuyaService.setBrightness(newBrightness);
+                    } else if (!isTuyaConnected) {
+                        safeShowSnackbar("Device not connected - check device ID configuration");
                     }
 
                     lightSettings.setBrightness(newBrightness);
@@ -370,10 +390,22 @@ public class SettingsFragment extends Fragment {
         // Reconnect button
         if (buttonReconnectTuya != null) {
             buttonReconnectTuya.setOnClickListener(v -> {
-                Log.d(TAG, "Manual Tuya reconnect requested");
+                Log.d(TAG, "Manual Cloud reconnect requested for device: " + currentDeviceId);
+
+                if (!tuyaService.isDeviceIdSet()) {
+                    // Reload device ID from preferences in case it was updated
+                    loadDeviceIdFromPreferences();
+                    if (currentDeviceId != null && !currentDeviceId.trim().isEmpty()) {
+                        tuyaService.setDeviceId(currentDeviceId);
+                    } else {
+                        safeShowSnackbar("Device ID not configured. Please set device ID in Home tab.");
+                        return;
+                    }
+                }
+
                 if (tuyaService != null) {
                     tuyaService.connect();
-                    safeShowSnackbar("Reconnecting to Tuya Cloud...");
+                    safeShowSnackbar("Reconnecting to Cloud with device: " + currentDeviceId.substring(0, 8) + "...");
                 }
             });
         }
@@ -395,7 +427,7 @@ public class SettingsFragment extends Fragment {
                     notifySettingsChanged();
                     safeShowSnackbar("🌅 Sunset mode activated (80% brightness)");
                 } else {
-                    safeShowSnackbar("Tuya device not connected");
+                    safeShowSnackbar("Cloud device not connected - check device ID configuration");
                 }
             });
         }
@@ -411,7 +443,7 @@ public class SettingsFragment extends Fragment {
                     notifySettingsChanged();
                     safeShowSnackbar("🌙 Bedtime mode activated (20% brightness)");
                 } else {
-                    safeShowSnackbar("Tuya device not connected");
+                    safeShowSnackbar("Cloud device not connected - check device ID configuration");
                 }
             });
         }
@@ -466,6 +498,8 @@ public class SettingsFragment extends Fragment {
                     // Update Tuya device
                     if (isTuyaConnected && tuyaService != null) {
                         tuyaService.setColor(colorHex);
+                    } else if (!isTuyaConnected) {
+                        safeShowSnackbar("Device not connected - check device ID configuration");
                     }
 
                     // Update settings
@@ -665,6 +699,30 @@ public class SettingsFragment extends Fragment {
         }
     }
 
+    // Method to update device ID when changed from Home fragment
+    public void updateDeviceId(String newDeviceId) {
+        if (newDeviceId != null && !newDeviceId.equals(currentDeviceId)) {
+            Log.d(TAG, "Updating device ID in Settings: " + newDeviceId);
+            currentDeviceId = newDeviceId;
+
+            // Disconnect current service and reinitialize with new device ID
+            if (tuyaService != null) {
+                tuyaService.disconnect();
+                isTuyaConnected = false;
+            }
+
+            // Reinitialize with new device ID
+            initializeTuyaService();
+
+            safeUpdateUI(() -> updateTuyaControls());
+        }
+    }
+
+    // Method to get current device ID
+    public String getCurrentDeviceId() {
+        return currentDeviceId;
+    }
+
     // Public methods for external control
     public boolean isAutoScheduleEnabled() {
         return lightSettings != null && lightSettings.isAutoScheduleEnabled();
@@ -735,6 +793,26 @@ public class SettingsFragment extends Fragment {
         }
     }
 
+    // Method to reload device ID and reconnect (useful when device ID changes)
+    public void reloadDeviceIdAndReconnect() {
+        Log.d(TAG, "Reloading device ID and reconnecting...");
+
+        // Reload device ID from preferences
+        loadDeviceIdFromPreferences();
+
+        // Update Tuya service with new device ID if changed
+        if (tuyaService != null) {
+            String currentServiceDeviceId = tuyaService.getDeviceId();
+            if (!currentDeviceId.equals(currentServiceDeviceId)) {
+                Log.d(TAG, "Device ID changed, updating service: " + currentServiceDeviceId + " -> " + currentDeviceId);
+                updateDeviceId(currentDeviceId);
+            } else {
+                // Just reconnect with existing device ID
+                forceTuyaReconnect();
+            }
+        }
+    }
+
     // Fragment lifecycle
     @Override
     public void onResume() {
@@ -743,10 +821,19 @@ public class SettingsFragment extends Fragment {
 
         isFragmentActive = true;
 
-        // Reconnect Tuya if needed
-        if (tuyaService != null && !tuyaService.isConnected()) {
-            Log.d(TAG, "Reconnecting Tuya service...");
-            tuyaService.connect();
+        // Reload device ID in case it was changed in another fragment
+        String previousDeviceId = currentDeviceId;
+        loadDeviceIdFromPreferences();
+
+        if (!currentDeviceId.equals(previousDeviceId)) {
+            Log.d(TAG, "Device ID changed while fragment was paused, updating: " + previousDeviceId + " -> " + currentDeviceId);
+            updateDeviceId(currentDeviceId);
+        } else {
+            // Reconnect Tuya if needed with existing device ID
+            if (tuyaService != null && !tuyaService.isConnected()) {
+                Log.d(TAG, "Reconnecting Tuya service...");
+                tuyaService.connect();
+            }
         }
 
         // Update UI
@@ -825,5 +912,191 @@ public class SettingsFragment extends Fragment {
         // Final safety measure
         isFragmentActive = false;
         callback = null;
+    }
+
+    // Emergency cleanup method
+    public void emergencyCleanup() {
+        Log.w(TAG, "Emergency cleanup initiated for SettingsFragment");
+
+        isFragmentActive = false;
+
+        // Stop Tuya service immediately
+        if (tuyaService != null) {
+            try {
+                tuyaService.disconnect();
+            } catch (Exception e) {
+                Log.e(TAG, "Error during emergency Tuya disconnect", e);
+            }
+            tuyaService = null;
+        }
+
+        // Clear all references
+        callback = null;
+        lightSettings = null;
+
+        Log.d(TAG, "SettingsFragment emergency cleanup completed");
+    }
+
+    // Method to get fragment status for debugging
+    public String getFragmentStatus() {
+        StringBuilder status = new StringBuilder();
+        status.append("SettingsFragment Status:\n");
+        status.append("- Added: ").append(isAdded()).append("\n");
+        status.append("- Active: ").append(isFragmentActive).append("\n");
+        status.append("- Activity null: ").append(getActivity() == null).append("\n");
+        status.append("- Cloud connected: ").append(isTuyaConnected).append("\n");
+        status.append("- Current device ID: ").append(currentDeviceId).append("\n");
+        status.append("- Auto schedule enabled: ").append(isAutoScheduleEnabled()).append("\n");
+
+        if (lightSettings != null) {
+            status.append("- Bulb on: ").append(lightSettings.isBulbOn()).append("\n");
+            status.append("- Brightness: ").append(lightSettings.getBrightness()).append("%\n");
+            status.append("- Color: ").append(lightSettings.getColor()).append("\n");
+            status.append("- Username: ").append(lightSettings.getUsername()).append("\n");
+            status.append("- Sunset time: ").append(lightSettings.getSunsetTime()).append("\n");
+            status.append("- Bedtime: ").append(lightSettings.getBedtime()).append("\n");
+        } else {
+            status.append("- Light settings: null\n");
+        }
+
+        if (tuyaService != null) {
+            status.append("- Service device ID: ").append(tuyaService.getDeviceId()).append("\n");
+            status.append("- Service connected: ").append(tuyaService.isConnected()).append("\n");
+        } else {
+            status.append("- Cloud service: null\n");
+        }
+
+        return status.toString();
+    }
+
+    // Method to check if settings are properly configured
+    public boolean areSettingsValid() {
+        return lightSettings != null &&
+                currentDeviceId != null &&
+                !currentDeviceId.trim().isEmpty() &&
+                lightSettings.getSunsetTime() != null &&
+                lightSettings.getBedtime() != null;
+    }
+
+    // Method to get connection status for external monitoring
+    public String getConnectionStatus() {
+        if (tuyaService == null) {
+            return "Service not initialized";
+        }
+
+        StringBuilder status = new StringBuilder();
+        status.append("Device: ").append(currentDeviceId.substring(0, 8)).append("..., ");
+        status.append("Connected: ").append(isTuyaConnected ? "Yes" : "No").append(", ");
+        status.append("Service ID Set: ").append(tuyaService.isDeviceIdSet() ? "Yes" : "No");
+
+        return status.toString();
+    }
+
+    // Method to validate and set device ID (for external calls)
+    public boolean setDeviceIdIfValid(String deviceId) {
+        if (deviceId != null && deviceId.length() >= 20 && deviceId.length() <= 25 && deviceId.matches("[a-zA-Z0-9]+")) {
+            updateDeviceId(deviceId);
+            return true;
+        }
+        return false;
+    }
+
+    // Method to force settings refresh from external source
+    public void forceSettingsRefresh() {
+        if (!isAdded()) {
+            Log.w(TAG, "Cannot force refresh - fragment not attached");
+            return;
+        }
+
+        Log.d(TAG, "Force refreshing SettingsFragment");
+
+        // Reload device ID
+        loadDeviceIdFromPreferences();
+
+        // Update UI
+        safeUpdateUI(() -> {
+            updateScheduleDisplay();
+            updateTuyaControls();
+            updateColorSelection();
+
+            if (lightSettings != null) {
+                if (switchAutoSchedule != null) {
+                    switchAutoSchedule.setChecked(lightSettings.isAutoScheduleEnabled());
+                }
+                if (switchBulbOnOff != null) {
+                    switchBulbOnOff.setChecked(lightSettings.isBulbOn());
+                }
+                if (seekBarBrightness != null) {
+                    seekBarBrightness.setProgress(lightSettings.getBrightness());
+                }
+                if (editUsername != null) {
+                    editUsername.setText(lightSettings.getUsername());
+                }
+
+                updateScheduleVisibility();
+            }
+        });
+
+        Log.d(TAG, "SettingsFragment force refresh completed");
+    }
+
+    // Method to safely execute schedule commands
+    public void executeSunsetMode() {
+        if (!areSettingsValid()) {
+            Log.w(TAG, "Cannot execute sunset mode - settings not valid");
+            return;
+        }
+
+        try {
+            testSunsetMode();
+        } catch (Exception e) {
+            Log.e(TAG, "Error executing sunset mode", e);
+            safeShowSnackbar("Error activating sunset mode");
+        }
+    }
+
+    public void executeBedtimeMode() {
+        if (!areSettingsValid()) {
+            Log.w(TAG, "Cannot execute bedtime mode - settings not valid");
+            return;
+        }
+
+        try {
+            testBedtimeMode();
+        } catch (Exception e) {
+            Log.e(TAG, "Error executing bedtime mode", e);
+            safeShowSnackbar("Error activating bedtime mode");
+        }
+    }
+
+    // Method to sync settings with external changes
+    public void syncWithExternalChanges(LightSettings externalSettings) {
+        if (!isAdded() || externalSettings == null) return;
+
+        Log.d(TAG, "Syncing SettingsFragment with external changes");
+
+        // Update internal settings
+        this.lightSettings = externalSettings;
+
+        // Update UI to reflect changes
+        refreshSettings(externalSettings);
+
+        // If Tuya service state differs from external settings, sync it
+        if (isTuyaConnected && tuyaService != null) {
+            if (tuyaService.isLightOn() != externalSettings.isBulbOn()) {
+                Log.d(TAG, "Syncing bulb state: " + externalSettings.isBulbOn());
+                tuyaService.setLightState(externalSettings.isBulbOn());
+            }
+
+            if (tuyaService.getCurrentBrightness() != externalSettings.getBrightness()) {
+                Log.d(TAG, "Syncing brightness: " + externalSettings.getBrightness() + "%");
+                tuyaService.setBrightness(externalSettings.getBrightness());
+            }
+
+            if (!tuyaService.getCurrentColor().equals(externalSettings.getColor())) {
+                Log.d(TAG, "Syncing color: " + externalSettings.getColor());
+                tuyaService.setColor(externalSettings.getColor());
+            }
+        }
     }
 }

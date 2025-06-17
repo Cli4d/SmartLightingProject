@@ -1,4 +1,4 @@
-// TuyaCloudApiService.java - Fixed with correct Tuya signature format
+// TuyaCloudApiService.java - Updated with configurable device ID
 package com.smart.smartbulb.services;
 
 import android.graphics.Color;
@@ -22,8 +22,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
- * Fixed Tuya Cloud API implementation with correct signature format
- * Based on working Stack Overflow solution
+ * Updated Tuya Cloud API implementation with configurable device ID
+ * Device ID is now set through setDeviceId() method instead of being hardcoded
  */
 public class TuyaCloudApiService {
 
@@ -34,8 +34,8 @@ public class TuyaCloudApiService {
     private static final String CLIENT_ID = "sesv3uta99wjjhpfdq97";     // Your Access ID
     private static final String CLIENT_SECRET = "2a8457113006496fa9f7c9c56baa0fbd";    // Your Access Secret
 
-    // Device configuration - UPDATE WITH YOUR DEVICE ID
-    private String deviceId = "bfc64cc8fa223bd6afxqtb";
+    // Device configuration - Now configurable via setDeviceId()
+    private String deviceId = null; // No default device ID - must be set via setDeviceId()
 
     // Authentication
     private String accessToken = null;
@@ -59,7 +59,7 @@ public class TuyaCloudApiService {
     private TuyaCloudCallback callback;
 
     public TuyaCloudApiService() {
-        // Constructor
+        // Constructor - device ID must be set via setDeviceId()
     }
 
     /**
@@ -70,18 +70,37 @@ public class TuyaCloudApiService {
     }
 
     /**
-     * Set device ID
+     * Set device ID - REQUIRED before calling connect()
      */
     public void setDeviceId(String deviceId) {
-        this.deviceId = deviceId;
-        Log.d(TAG, "Device ID set: " + deviceId);
+        if (deviceId == null || deviceId.trim().isEmpty()) {
+            Log.e(TAG, "Device ID cannot be null or empty");
+            return;
+        }
+
+        this.deviceId = deviceId.trim();
+        Log.d(TAG, "Device ID set: " + this.deviceId);
+    }
+
+    /**
+     * Get current device ID
+     */
+    public String getDeviceId() {
+        return deviceId;
+    }
+
+    /**
+     * Check if device ID is set
+     */
+    public boolean isDeviceIdSet() {
+        return deviceId != null && !deviceId.trim().isEmpty();
     }
 
     /**
      * Initialize connection to Tuya Cloud
      */
     public void connect() {
-        Log.d(TAG, "Connecting to Tuya Cloud API with CORRECT signature format...");
+        Log.d(TAG, "Connecting to Tuya Cloud API with configurable device ID...");
 
         // Validate configuration
         if ("your_tuya_client_id_here".equals(CLIENT_ID) || "your_tuya_secret_here".equals(CLIENT_SECRET)) {
@@ -92,6 +111,16 @@ public class TuyaCloudApiService {
             return;
         }
 
+        // Validate device ID is set
+        if (!isDeviceIdSet()) {
+            Log.e(TAG, "Device ID not set. Please call setDeviceId() before connect()");
+            if (callback != null) {
+                callback.onError("Device ID not configured. Please set device ID first.");
+            }
+            return;
+        }
+
+        Log.d(TAG, "Connecting with device ID: " + deviceId);
         authenticate();
     }
 
@@ -107,7 +136,15 @@ public class TuyaCloudApiService {
      * Turn light on/off
      */
     public void setLightState(boolean isOn) {
-        Log.d(TAG, "Setting light state: " + (isOn ? "ON" : "OFF"));
+        if (!isDeviceIdSet()) {
+            Log.e(TAG, "Cannot set light state: Device ID not set");
+            if (callback != null) {
+                callback.onError("Device ID not configured");
+            }
+            return;
+        }
+
+        Log.d(TAG, "Setting light state: " + (isOn ? "ON" : "OFF") + " for device: " + deviceId);
 
         JSONObject command = new JSONObject();
         try {
@@ -123,7 +160,15 @@ public class TuyaCloudApiService {
      * Set brightness (1-100%)
      */
     public void setBrightness(int brightness) {
-        Log.d(TAG, "Setting brightness: " + brightness + "%");
+        if (!isDeviceIdSet()) {
+            Log.e(TAG, "Cannot set brightness: Device ID not set");
+            if (callback != null) {
+                callback.onError("Device ID not configured");
+            }
+            return;
+        }
+
+        Log.d(TAG, "Setting brightness: " + brightness + "% for device: " + deviceId);
 
         // Tuya brightness range is typically 10-1000
         int tuyaBrightness = Math.max(10, Math.min(1000, brightness * 10));
@@ -142,7 +187,15 @@ public class TuyaCloudApiService {
      * Set color using hex color code
      */
     public void setColor(String hexColor) {
-        Log.d(TAG, "Setting color: " + hexColor);
+        if (!isDeviceIdSet()) {
+            Log.e(TAG, "Cannot set color: Device ID not set");
+            if (callback != null) {
+                callback.onError("Device ID not configured");
+            }
+            return;
+        }
+
+        Log.d(TAG, "Setting color: " + hexColor + " for device: " + deviceId);
 
         try {
             // Remove # if present
@@ -186,7 +239,15 @@ public class TuyaCloudApiService {
      * Get current device status
      */
     public void getDeviceStatus() {
-        Log.d(TAG, "Getting device status...");
+        if (!isDeviceIdSet()) {
+            Log.e(TAG, "Cannot get device status: Device ID not set");
+            if (callback != null) {
+                callback.onError("Device ID not configured");
+            }
+            return;
+        }
+
+        Log.d(TAG, "Getting device status for device: " + deviceId);
         new GetStatusTask().execute();
     }
 
@@ -194,14 +255,22 @@ public class TuyaCloudApiService {
      * Send command to device
      */
     private void sendCommand(JSONObject command) {
+        if (!isDeviceIdSet()) {
+            Log.e(TAG, "Cannot send command: Device ID not set");
+            if (callback != null) {
+                callback.onError("Device ID not configured");
+            }
+            return;
+        }
+
         new SendCommandTask(command).execute();
     }
 
     /**
-     * Check if device is connected (has valid token)
+     * Check if device is connected (has valid token and device ID is set)
      */
     public boolean isConnected() {
-        return accessToken != null && System.currentTimeMillis() < tokenExpireTime;
+        return isDeviceIdSet() && accessToken != null && System.currentTimeMillis() < tokenExpireTime;
     }
 
     /**
@@ -223,13 +292,23 @@ public class TuyaCloudApiService {
      * Disconnect from Tuya Cloud
      */
     public void disconnect() {
-        Log.d(TAG, "Disconnecting from Tuya Cloud");
+        Log.d(TAG, "Disconnecting from Tuya Cloud" + (deviceId != null ? " (device: " + deviceId + ")" : ""));
         accessToken = null;
         tokenExpireTime = 0;
 
         if (callback != null) {
             callback.onDeviceDisconnected();
         }
+    }
+
+    /**
+     * Clear device configuration (useful when switching devices)
+     */
+    public void clearDeviceId() {
+        Log.d(TAG, "Clearing device ID configuration");
+        deviceId = null;
+        // Also disconnect to ensure clean state
+        disconnect();
     }
 
     // ==================== ASYNC TASKS ====================
@@ -317,9 +396,9 @@ public class TuyaCloudApiService {
         @Override
         protected void onPostExecute(String result) {
             if (result.equals("SUCCESS")) {
-                Log.d(TAG, "Connected to Tuya Cloud successfully");
+                Log.d(TAG, "Connected to Tuya Cloud successfully for device: " + deviceId);
                 if (callback != null) {
-                    callback.onDeviceConnected("Tuya Smart Bulb");
+                    callback.onDeviceConnected("Tuya Smart Bulb (" + deviceId.substring(0, 8) + "...)");
                 }
                 // Get initial device status
                 getDeviceStatus();
@@ -345,9 +424,9 @@ public class TuyaCloudApiService {
         @Override
         protected String doInBackground(Void... voids) {
             try {
-                // Check if token is valid
+                // Check if token is valid and device ID is set
                 if (!isConnected()) {
-                    Log.w(TAG, "Token expired, re-authenticating...");
+                    Log.w(TAG, "Token expired or device ID not set, re-authenticating...");
                     return "TOKEN_EXPIRED";
                 }
 
@@ -362,7 +441,7 @@ public class TuyaCloudApiService {
                 requestBody.put("commands", commands);
 
                 String body = requestBody.toString();
-                Log.d(TAG, "Sending command: " + body);
+                Log.d(TAG, "Sending command to device " + deviceId + ": " + body);
 
                 // CORRECT signature format for POST with body:
                 // 1. Create content hash of body
@@ -433,7 +512,7 @@ public class TuyaCloudApiService {
         @Override
         protected void onPostExecute(String result) {
             if (result.equals("SUCCESS")) {
-                Log.d(TAG, "Command sent successfully");
+                Log.d(TAG, "Command sent successfully to device: " + deviceId);
                 if (callback != null) {
                     callback.onSuccess("Command executed successfully");
                 }
@@ -443,7 +522,7 @@ public class TuyaCloudApiService {
                 // Re-authenticate and retry
                 authenticate();
             } else {
-                Log.e(TAG, "Command failed: " + result);
+                Log.e(TAG, "Command failed for device " + deviceId + ": " + result);
                 if (callback != null) {
                     callback.onError("Command failed: " + result);
                 }
@@ -458,7 +537,7 @@ public class TuyaCloudApiService {
         @Override
         protected String doInBackground(Void... voids) {
             try {
-                // Check if token is valid
+                // Check if token is valid and device ID is set
                 if (!isConnected()) {
                     return "TOKEN_EXPIRED";
                 }
@@ -496,7 +575,7 @@ public class TuyaCloudApiService {
 
                 if (responseCode == 200) {
                     String response = readResponse(conn);
-                    Log.d(TAG, "Status response: " + response);
+                    Log.d(TAG, "Status response for device " + deviceId + ": " + response);
 
                     JSONObject jsonResponse = new JSONObject(response);
                     if (jsonResponse.getBoolean("success")) {
@@ -525,7 +604,7 @@ public class TuyaCloudApiService {
             if (result.equals("TOKEN_EXPIRED")) {
                 authenticate();
             } else if (!result.equals("SUCCESS")) {
-                Log.e(TAG, "Get status failed: " + result);
+                Log.e(TAG, "Get status failed for device " + deviceId + ": " + result);
             }
         }
     }
@@ -546,7 +625,7 @@ public class TuyaCloudApiService {
                         boolean newLightState = status.getBoolean("value");
                         if (newLightState != isLightOn) {
                             isLightOn = newLightState;
-                            Log.d(TAG, "Light state changed: " + (isLightOn ? "ON" : "OFF"));
+                            Log.d(TAG, "Light state changed for device " + deviceId + ": " + (isLightOn ? "ON" : "OFF"));
                             if (callback != null) {
                                 callback.onLightStateChanged(isLightOn);
                             }
@@ -558,7 +637,7 @@ public class TuyaCloudApiService {
                         int newBrightness = Math.max(1, Math.min(100, tuyaBrightness / 10));
                         if (newBrightness != currentBrightness) {
                             currentBrightness = newBrightness;
-                            Log.d(TAG, "Brightness changed: " + currentBrightness + "%");
+                            Log.d(TAG, "Brightness changed for device " + deviceId + ": " + currentBrightness + "%");
                             if (callback != null) {
                                 callback.onBrightnessChanged(currentBrightness);
                             }
@@ -570,7 +649,7 @@ public class TuyaCloudApiService {
                         String newColor = convertHSVToHex(hsvValue);
                         if (!newColor.equals(currentColor)) {
                             currentColor = newColor;
-                            Log.d(TAG, "Color changed: " + currentColor);
+                            Log.d(TAG, "Color changed for device " + deviceId + ": " + currentColor);
                             if (callback != null) {
                                 callback.onColorChanged(currentColor);
                             }
