@@ -46,6 +46,13 @@
     <color name="bulb_warm">#FFBB66</color>
     <color name="bulb_cool">#BBEEFF</color>
     <!-- Status Colors for Tuya Connection -->
+
+    <color name="schedule_active">#2196F3</color>
+    <color name="schedule_inactive">#9E9E9E</color>
+    <color name="notification_accent">#FF9800</color>
     <color name="success_green">#4CAF50</color>
     <color name="error_red">#F44336</color>
+
+    <!-- Material Design 3 colors (add if not present) -->
+
 </resources>

@@ -27,6 +27,7 @@ import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.timepicker.MaterialTimePicker;
 import com.google.android.material.timepicker.TimeFormat;
 import com.smart.smartbulb.services.TuyaCloudApiService;
+import com.smart.smartbulb.services.ScheduleManager; // NEW IMPORT
 
 import java.util.function.Consumer;
 
@@ -70,6 +71,10 @@ public class SettingsFragment extends Fragment {
     private Button buttonTestBedtime;
     private Button buttonResetSchedule;
 
+    // NEW: Schedule manager for automatic scheduling
+    private ScheduleManager scheduleManager;
+    private TextView textScheduleStatus; // NEW: Status display
+
     // State tracking
     private LightSettings lightSettings;
     private Consumer<LightSettings> callback;
@@ -86,7 +91,7 @@ public class SettingsFragment extends Fragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        Log.d(TAG, "SettingsFragment initialized with configurable Tuya integration");
+        Log.d(TAG, "SettingsFragment initialized with automatic scheduling support");
 
         isFragmentActive = true;
 
@@ -94,6 +99,7 @@ public class SettingsFragment extends Fragment {
         loadDeviceIdFromPreferences();
         initializeViews();
         initializeLightSettings();
+        initializeScheduleManager(); // NEW: Initialize schedule manager
         initializeTuyaService();
         setupUI();
     }
@@ -104,6 +110,20 @@ public class SettingsFragment extends Fragment {
             currentDeviceId = prefs.getString(PREF_DEVICE_ID, DEFAULT_DEVICE_ID);
             Log.d(TAG, "SettingsFragment loaded device ID from preferences: " + currentDeviceId);
         }
+    }
+
+    // NEW: Initialize the schedule manager
+    private void initializeScheduleManager() {
+        if (!isAdded()) {
+            Log.w(TAG, "Cannot initialize schedule manager - fragment not attached");
+            return;
+        }
+
+        Log.d(TAG, "Initializing ScheduleManager");
+        scheduleManager = new ScheduleManager(requireContext());
+
+        // Restore any existing schedules from preferences
+        scheduleManager.restoreSchedulingFromPreferences();
     }
 
     private void initializeViews() {
@@ -121,6 +141,7 @@ public class SettingsFragment extends Fragment {
         textBedtime = rootView.findViewById(R.id.textBedtime);
         textSunsetBrightness = rootView.findViewById(R.id.textSunsetBrightness);
         textBedtimeBrightness = rootView.findViewById(R.id.textBedtimeBrightness);
+        textScheduleStatus = rootView.findViewById(R.id.textScheduleStatus); // NEW: Status display
 
         // Color controls
         colorContainer = rootView.findViewById(R.id.colorContainer);
@@ -294,8 +315,10 @@ public class SettingsFragment extends Fragment {
         setupProfileSettings();
         setupTuyaControls();
         setupAdvancedControls();
+        updateScheduleStatusDisplay(); // NEW: Update schedule status
     }
 
+    // MODIFIED: Enhanced schedule settings with automatic scheduling
     private void setupScheduleSettings() {
         if (!isAdded()) return;
 
@@ -306,17 +329,33 @@ public class SettingsFragment extends Fragment {
         updateScheduleVisibility();
         updateScheduleDisplay();
 
-        // Auto schedule toggle
+        // MODIFIED: Auto schedule toggle with actual scheduling
         if (switchAutoSchedule != null) {
             switchAutoSchedule.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 lightSettings.setAutoScheduleEnabled(isChecked);
                 updateScheduleVisibility();
                 notifySettingsChanged();
 
-                String message = isChecked ?
-                        "Auto schedule enabled - lights will adjust at sunset and bedtime" :
-                        "Auto schedule disabled - manual control only";
-                safeShowSnackbar(message);
+                // CRITICAL FIX: Add actual scheduling logic
+                if (isChecked) {
+                    // Enable automatic scheduling
+                    if (scheduleManager != null) {
+                        scheduleManager.scheduleAutoModes(lightSettings);
+                        Log.d(TAG, "Automatic scheduling enabled");
+                    }
+                    String message = "Auto schedule enabled - lights will adjust at sunset and bedtime";
+                    safeShowSnackbar(message);
+                } else {
+                    // Disable automatic scheduling
+                    if (scheduleManager != null) {
+                        scheduleManager.cancelScheduledAlarms();
+                        Log.d(TAG, "Automatic scheduling disabled");
+                    }
+                    String message = "Auto schedule disabled - manual control only";
+                    safeShowSnackbar(message);
+                }
+
+                updateScheduleStatusDisplay(); // NEW: Update status display
             });
         }
 
@@ -413,14 +452,21 @@ public class SettingsFragment extends Fragment {
         updateTuyaControls();
     }
 
+    // MODIFIED: Enhanced advanced controls with schedule manager integration
     private void setupAdvancedControls() {
         if (!isAdded()) return;
 
-        // Test sunset button
+        // MODIFIED: Test sunset button with schedule manager
         if (buttonTestSunset != null) {
             buttonTestSunset.setOnClickListener(v -> {
-                Log.d(TAG, "Test sunset triggered");
-                if (isTuyaConnected && tuyaService != null) {
+                Log.d(TAG, "Test sunset triggered via schedule manager");
+
+                if (scheduleManager != null) {
+                    // Use schedule manager for consistent behavior
+                    scheduleManager.testSunsetMode();
+                    safeShowSnackbar("🌅 Test sunset mode activated via schedule manager");
+                } else if (isTuyaConnected && tuyaService != null) {
+                    // Fallback to direct Tuya control
                     tuyaService.setBrightness(80);
                     lightSettings.setBrightness(80);
                     lightSettings.setDimmed(false);
@@ -432,11 +478,17 @@ public class SettingsFragment extends Fragment {
             });
         }
 
-        // Test bedtime button
+        // MODIFIED: Test bedtime button with schedule manager
         if (buttonTestBedtime != null) {
             buttonTestBedtime.setOnClickListener(v -> {
-                Log.d(TAG, "Test bedtime triggered");
-                if (isTuyaConnected && tuyaService != null) {
+                Log.d(TAG, "Test bedtime triggered via schedule manager");
+
+                if (scheduleManager != null) {
+                    // Use schedule manager for consistent behavior
+                    scheduleManager.testBedtimeMode();
+                    safeShowSnackbar("🌙 Test bedtime mode activated via schedule manager");
+                } else if (isTuyaConnected && tuyaService != null) {
+                    // Fallback to direct Tuya control
                     tuyaService.setBrightness(20);
                     lightSettings.setBrightness(20);
                     lightSettings.setDimmed(true);
@@ -448,10 +500,17 @@ public class SettingsFragment extends Fragment {
             });
         }
 
-        // Reset schedule button
+        // MODIFIED: Reset schedule button with schedule manager integration
         if (buttonResetSchedule != null) {
             buttonResetSchedule.setOnClickListener(v -> {
                 Log.d(TAG, "Reset schedule triggered");
+
+                // Cancel any existing schedules
+                if (scheduleManager != null) {
+                    scheduleManager.cancelScheduledAlarms();
+                }
+
+                // Reset to defaults
                 lightSettings.setSunsetTime("18:30");
                 lightSettings.setBedtime("22:00");
                 lightSettings.setAutoScheduleEnabled(false);
@@ -461,6 +520,7 @@ public class SettingsFragment extends Fragment {
                     switchAutoSchedule.setChecked(false);
                 }
                 updateScheduleVisibility();
+                updateScheduleStatusDisplay(); // NEW: Update status
 
                 notifySettingsChanged();
                 safeShowSnackbar("Schedule reset to defaults");
@@ -567,6 +627,20 @@ public class SettingsFragment extends Fragment {
         }
     }
 
+    // NEW: Update schedule status display
+    private void updateScheduleStatusDisplay() {
+        if (textScheduleStatus != null && scheduleManager != null && isAdded()) {
+            if (lightSettings.isAutoScheduleEnabled()) {
+                String status = scheduleManager.getSchedulingStatus();
+                textScheduleStatus.setText("✅ Active: Next sunset " + lightSettings.getSunsetTime() + ", bedtime " + lightSettings.getBedtime());
+                textScheduleStatus.setVisibility(View.VISIBLE);
+            } else {
+                textScheduleStatus.setText("❌ Automatic scheduling disabled");
+                textScheduleStatus.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
     private void updateTuyaConnectionStatus(String status, boolean isConnected) {
         if (textTuyaConnectionStatus != null && isAdded()) {
             textTuyaConnectionStatus.setText("Status: " + status);
@@ -590,11 +664,11 @@ public class SettingsFragment extends Fragment {
         }
 
         if (buttonTestSunset != null) {
-            buttonTestSunset.setEnabled(isTuyaConnected);
+            buttonTestSunset.setEnabled(true); // Always enabled (uses schedule manager)
         }
 
         if (buttonTestBedtime != null) {
-            buttonTestBedtime.setEnabled(isTuyaConnected);
+            buttonTestBedtime.setEnabled(true); // Always enabled (uses schedule manager)
         }
 
         if (buttonReconnectTuya != null) {
@@ -625,6 +699,7 @@ public class SettingsFragment extends Fragment {
         }
     }
 
+    // MODIFIED: Enhanced time picker with automatic rescheduling
     private void showTimePicker(String timeType) {
         if (!isAdded()) return;
 
@@ -665,6 +740,14 @@ public class SettingsFragment extends Fragment {
 
             updateScheduleDisplay();
             notifySettingsChanged();
+
+            // CRITICAL FIX: Reschedule when times change
+            if (lightSettings.isAutoScheduleEnabled() && scheduleManager != null) {
+                Log.d(TAG, "Rescheduling due to time change: " + timeType + " -> " + newTime);
+                scheduleManager.scheduleAutoModes(lightSettings);
+            }
+
+            updateScheduleStatusDisplay(); // NEW: Update status display
         });
 
         picker.show(getChildFragmentManager(), "TIME_PICKER");
@@ -748,6 +831,7 @@ public class SettingsFragment extends Fragment {
         return isTuyaConnected;
     }
 
+    // MODIFIED: Enhanced refresh with schedule status update
     public void refreshSettings(LightSettings settings) {
         if (!isAdded() || settings == null) return;
 
@@ -756,6 +840,7 @@ public class SettingsFragment extends Fragment {
             updateScheduleDisplay();
             updateTuyaControls();
             updateColorSelection();
+            updateScheduleStatusDisplay(); // NEW: Update schedule status
 
             if (switchAutoSchedule != null) {
                 switchAutoSchedule.setChecked(settings.isAutoScheduleEnabled());
@@ -774,15 +859,19 @@ public class SettingsFragment extends Fragment {
         });
     }
 
-    // Test methods for debugging
+    // Test methods for debugging - MODIFIED to use schedule manager
     public void testSunsetMode() {
-        if (buttonTestSunset != null) {
+        if (scheduleManager != null) {
+            scheduleManager.testSunsetMode();
+        } else if (buttonTestSunset != null) {
             buttonTestSunset.performClick();
         }
     }
 
     public void testBedtimeMode() {
-        if (buttonTestBedtime != null) {
+        if (scheduleManager != null) {
+            scheduleManager.testBedtimeMode();
+        } else if (buttonTestBedtime != null) {
             buttonTestBedtime.performClick();
         }
     }
@@ -813,6 +902,20 @@ public class SettingsFragment extends Fragment {
         }
     }
 
+    // NEW: Get schedule manager for external access
+    public ScheduleManager getScheduleManager() {
+        return scheduleManager;
+    }
+
+    // NEW: Force schedule refresh
+    public void forceScheduleRefresh() {
+        if (scheduleManager != null && lightSettings != null) {
+            Log.d(TAG, "Forcing schedule refresh");
+            scheduleManager.forceReschedule();
+            updateScheduleStatusDisplay();
+        }
+    }
+
     // Fragment lifecycle
     @Override
     public void onResume() {
@@ -840,6 +943,7 @@ public class SettingsFragment extends Fragment {
         safeUpdateUI(() -> {
             updateTuyaControls();
             updateScheduleDisplay();
+            updateScheduleStatusDisplay(); // NEW: Update schedule status
         });
     }
 
@@ -855,6 +959,7 @@ public class SettingsFragment extends Fragment {
         Log.d(TAG, "SettingsFragment stopped");
     }
 
+    // MODIFIED: Enhanced cleanup with schedule manager
     @Override
     public void onDestroyView() {
         super.onDestroyView();
@@ -862,6 +967,16 @@ public class SettingsFragment extends Fragment {
 
         // Mark fragment as inactive
         isFragmentActive = false;
+
+        // Clean up schedule manager (but don't cancel active schedules)
+        if (scheduleManager != null) {
+            // Save current state before cleanup
+            if (lightSettings != null && lightSettings.isAutoScheduleEnabled()) {
+                Log.d(TAG, "Preserving active schedules during fragment cleanup");
+                // Schedules remain active in the background
+            }
+            scheduleManager = null;
+        }
 
         // Disconnect Tuya service
         if (tuyaService != null) {
@@ -887,6 +1002,7 @@ public class SettingsFragment extends Fragment {
         textBedtime = null;
         textSunsetBrightness = null;
         textBedtimeBrightness = null;
+        textScheduleStatus = null; // NEW: Clear schedule status
         colorContainer = null;
         colorPreview = null;
         editUsername = null;
@@ -914,7 +1030,7 @@ public class SettingsFragment extends Fragment {
         callback = null;
     }
 
-    // Emergency cleanup method
+    // Emergency cleanup method - MODIFIED
     public void emergencyCleanup() {
         Log.w(TAG, "Emergency cleanup initiated for SettingsFragment");
 
@@ -930,6 +1046,17 @@ public class SettingsFragment extends Fragment {
             tuyaService = null;
         }
 
+        // Clean up schedule manager
+        if (scheduleManager != null) {
+            try {
+                // Don't cancel schedules during emergency cleanup - they should continue running
+                Log.d(TAG, "Preserving schedules during emergency cleanup");
+            } catch (Exception e) {
+                Log.e(TAG, "Error during emergency schedule manager cleanup", e);
+            }
+            scheduleManager = null;
+        }
+
         // Clear all references
         callback = null;
         lightSettings = null;
@@ -937,7 +1064,7 @@ public class SettingsFragment extends Fragment {
         Log.d(TAG, "SettingsFragment emergency cleanup completed");
     }
 
-    // Method to get fragment status for debugging
+    // Method to get fragment status for debugging - MODIFIED
     public String getFragmentStatus() {
         StringBuilder status = new StringBuilder();
         status.append("SettingsFragment Status:\n");
@@ -947,6 +1074,13 @@ public class SettingsFragment extends Fragment {
         status.append("- Cloud connected: ").append(isTuyaConnected).append("\n");
         status.append("- Current device ID: ").append(currentDeviceId).append("\n");
         status.append("- Auto schedule enabled: ").append(isAutoScheduleEnabled()).append("\n");
+
+        if (scheduleManager != null) {
+            status.append("- Schedule manager active: true\n");
+            status.append(scheduleManager.getSchedulingStatus());
+        } else {
+            status.append("- Schedule manager active: false\n");
+        }
 
         if (lightSettings != null) {
             status.append("- Bulb on: ").append(lightSettings.isBulbOn()).append("\n");
@@ -969,13 +1103,14 @@ public class SettingsFragment extends Fragment {
         return status.toString();
     }
 
-    // Method to check if settings are properly configured
+    // Method to check if settings are properly configured - MODIFIED
     public boolean areSettingsValid() {
         return lightSettings != null &&
                 currentDeviceId != null &&
                 !currentDeviceId.trim().isEmpty() &&
                 lightSettings.getSunsetTime() != null &&
-                lightSettings.getBedtime() != null;
+                lightSettings.getBedtime() != null &&
+                scheduleManager != null;
     }
 
     // Method to get connection status for external monitoring
@@ -987,7 +1122,8 @@ public class SettingsFragment extends Fragment {
         StringBuilder status = new StringBuilder();
         status.append("Device: ").append(currentDeviceId.substring(0, 8)).append("..., ");
         status.append("Connected: ").append(isTuyaConnected ? "Yes" : "No").append(", ");
-        status.append("Service ID Set: ").append(tuyaService.isDeviceIdSet() ? "Yes" : "No");
+        status.append("Service ID Set: ").append(tuyaService.isDeviceIdSet() ? "Yes" : "No").append(", ");
+        status.append("Scheduling: ").append(scheduleManager != null ? "Active" : "Inactive");
 
         return status.toString();
     }
@@ -1001,7 +1137,7 @@ public class SettingsFragment extends Fragment {
         return false;
     }
 
-    // Method to force settings refresh from external source
+    // Method to force settings refresh from external source - MODIFIED
     public void forceSettingsRefresh() {
         if (!isAdded()) {
             Log.w(TAG, "Cannot force refresh - fragment not attached");
@@ -1013,11 +1149,17 @@ public class SettingsFragment extends Fragment {
         // Reload device ID
         loadDeviceIdFromPreferences();
 
+        // Refresh schedule manager
+        if (scheduleManager != null) {
+            scheduleManager.restoreSchedulingFromPreferences();
+        }
+
         // Update UI
         safeUpdateUI(() -> {
             updateScheduleDisplay();
             updateTuyaControls();
             updateColorSelection();
+            updateScheduleStatusDisplay(); // NEW: Update schedule status
 
             if (lightSettings != null) {
                 if (switchAutoSchedule != null) {
@@ -1040,7 +1182,7 @@ public class SettingsFragment extends Fragment {
         Log.d(TAG, "SettingsFragment force refresh completed");
     }
 
-    // Method to safely execute schedule commands
+    // Method to safely execute schedule commands - MODIFIED
     public void executeSunsetMode() {
         if (!areSettingsValid()) {
             Log.w(TAG, "Cannot execute sunset mode - settings not valid");
@@ -1048,7 +1190,11 @@ public class SettingsFragment extends Fragment {
         }
 
         try {
-            testSunsetMode();
+            if (scheduleManager != null) {
+                scheduleManager.testSunsetMode();
+            } else {
+                testSunsetMode();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error executing sunset mode", e);
             safeShowSnackbar("Error activating sunset mode");
@@ -1062,14 +1208,18 @@ public class SettingsFragment extends Fragment {
         }
 
         try {
-            testBedtimeMode();
+            if (scheduleManager != null) {
+                scheduleManager.testBedtimeMode();
+            } else {
+                testBedtimeMode();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Error executing bedtime mode", e);
             safeShowSnackbar("Error activating bedtime mode");
         }
     }
 
-    // Method to sync settings with external changes
+    // Method to sync settings with external changes - MODIFIED
     public void syncWithExternalChanges(LightSettings externalSettings) {
         if (!isAdded() || externalSettings == null) return;
 
@@ -1080,6 +1230,11 @@ public class SettingsFragment extends Fragment {
 
         // Update UI to reflect changes
         refreshSettings(externalSettings);
+
+        // Sync schedule manager if auto-schedule settings changed
+        if (scheduleManager != null) {
+            scheduleManager.scheduleAutoModes(externalSettings);
+        }
 
         // If Tuya service state differs from external settings, sync it
         if (isTuyaConnected && tuyaService != null) {

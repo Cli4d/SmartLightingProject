@@ -263,6 +263,26 @@
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
+                    <!-- NEW: Schedule Status Display -->
+                    <TextView
+                        android:id="@+id/textScheduleStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:padding="8dp"
+                        android:background="@drawable/rounded_status_background"
+                        android:textColor="@android:color/white"
+                        android:textSize="11sp"
+                        android:textStyle="italic"
+                        android:visibility="gone"
+                        android:text="⏰ Next: Sunset at 18:30, Bedtime at 22:00"
+                        android:drawableStart="@drawable/ic_schedule_small"
+                        android:drawablePadding="6dp"
+                        android:gravity="center_vertical"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/textScheduleDesc" />
+
                     <!-- Schedule Settings Container (visible when switch is on) -->
                     <LinearLayout
                         android:id="@+id/scheduleSettingsContainer"
@@ -272,7 +292,7 @@
                         android:orientation="vertical"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textScheduleDesc">
+                        app:layout_constraintTop_toBottomOf="@+id/textScheduleStatus">
 
                         <!-- Sunset Setting -->
                         <com.google.android.material.card.MaterialCardView
@@ -284,7 +304,10 @@
                             app:cardElevation="0dp"
                             app:strokeWidth="1dp"
                             app:strokeColor="@color/md_theme_outline"
-                            app:cardBackgroundColor="@color/md_theme_surfaceContainer">
+                            app:cardBackgroundColor="@color/md_theme_surfaceContainer"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?android:attr/selectableItemBackground">
 
                             <androidx.constraintlayout.widget.ConstraintLayout
                                 android:layout_width="match_parent"
@@ -353,7 +376,10 @@
                             app:cardElevation="0dp"
                             app:strokeWidth="1dp"
                             app:strokeColor="@color/md_theme_outline"
-                            app:cardBackgroundColor="@color/md_theme_surfaceContainer">
+                            app:cardBackgroundColor="@color/md_theme_surfaceContainer"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:foreground="?android:attr/selectableItemBackground">
 
                             <androidx.constraintlayout.widget.ConstraintLayout
                                 android:layout_width="match_parent"
