@@ -29,8 +29,8 @@ public class AmbientLightApiService {
     private static final String TELEMETRY_URL = BASE_URL + "/api/plugins/telemetry/DEVICE/07e5c2d0-319d-11f0-905b-715188ad2cd8/values/timeseries";
 
     // Demo credentials (these are public demo credentials)
-    private static final String DEMO_USERNAME = "oluochbrian936@gmail.com";
-    private static final String DEMO_PASSWORD = "Oluoch936@";
+    private static final String DEMO_USERNAME = "{username}";
+    private static final String DEMO_PASSWORD = "{password}";
 
     // Authentication token (cached)
     private static String authToken = null;

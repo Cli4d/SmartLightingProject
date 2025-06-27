@@ -31,8 +31,8 @@ public class TuyaCloudApiService {
 
     // Tuya Cloud API Configuration - UPDATE THESE WITH YOUR CREDENTIALS
     private static final String BASE_URL = "https://openapi.tuyaeu.com";
-    private static final String CLIENT_ID = "sesv3uta99wjjhpfdq97";     // Your Access ID
-    private static final String CLIENT_SECRET = "2a8457113006496fa9f7c9c56baa0fbd";    // Your Access Secret
+    private static final String CLIENT_ID = "{Client_ID}";     // Your Access ID
+    private static final String CLIENT_SECRET = "{client_secret}";    // Your Access Secret
 
     // Device configuration - Now configurable via setDeviceId()
     private String deviceId = null; // No default device ID - must be set via setDeviceId()
